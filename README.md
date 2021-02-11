@@ -7,11 +7,13 @@ This repository aims at implementing the arousal dynamics model as described in:
 
 Parameters and equations are taken from the papers.
 
-## To do:
+## To Do
 
-- Implement the revised model (in progress)
-- Write unit tests
-- Validate results
-- Clean up code
-- Package python code
-- Write R alternative
+- [ ] Add license
+- [ ] Add reference to equations as code comments
+- [ ] Implement the revised model (in progress)
+- [ ] Write unit tests
+- [ ] Validate results
+- [ ] Clean up code
+- [ ] Package python code
+- [ ] Write R alternative
