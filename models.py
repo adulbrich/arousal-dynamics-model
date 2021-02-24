@@ -73,7 +73,7 @@ def nonphotic_drive(X, S):
 def photoreceptor_conversion_rate(IE, S, version = '2018'): 
     # Photoreceptor Conversion Rate Function
     # Inputs:
-    #   I or E_emel: Illuminance (lux) or Melanopic Irradiance
+    #   I or E_emel: Illuminance (lux) or Melanopic Irradiance # Is it melanopic illuminance I_mel instead of just I?
     #   S: Wake = 1 or Sleep = 0 state 
     #   version: 2018 uses Illuminance, 2020 uses melanopic irradiance
     # Output:
@@ -95,14 +95,12 @@ def photoreceptor_conversion_rate(IE, S, version = '2018'):
 
     return alpha
 
-def photic_drive(X, Y, P, I, S, alpha):
+def photic_drive(X, Y, P, alpha):
     # Photic Drive to the Circadian function
     # Inputs:
     #   X, Y: Circadian Variables
     #   P: Photoreceptor Activity
-    #   I: Illuminance (lux)
-    #   S: Wake = 1 or Sleep = 0 state 
-    #   alpha: photorecpetor conversion rate
+    #   alpha: photoreceptor conversion rate
     # Outputs:
     #   D_p: photic drive to the circadian
 
@@ -162,9 +160,9 @@ def alertness_measure(C, H, Theta_L = 0):
     # Inputs:
     #   H: homeostatic drive
     #   C: circadian drive, sleep propensity model
-    #   Tetha_L: light-dependent modu- lation of the homeostatic weight
+    #   Tetha_L: light-dependent modulation of the homeostatic weight
     # Outputs:
-    #   AM: alertness measure for the specified type
+    #   AM: alertness measure on the KSS
 
     # KSS: Karolinska Sleepiness Scale
     # Ranges from 1 = "Extremely alert" to 9 = "Extremely sleepy, fighting sleep."
@@ -208,6 +206,12 @@ def melatonin_suppression(E_emel):
 def model(y, t, input_function, version = '2018'):
     V_v, V_m, H, X, Y, P, Theta_L = y
 
+    # Testing with forced wake between 20 and 23.5
+    if ((t/3600 % 24) > 20 and (t/3600 % 24) < 23.5):
+        forced = 1
+    else:
+        forced = 0
+
     IE    = input_function(t)
     S     = state(V_m) 
     alpha = photoreceptor_conversion_rate(IE, S, version)
@@ -216,8 +220,8 @@ def model(y, t, input_function, version = '2018'):
     C     = circadian_drive(X,Y)
     D_v   = total_sleep_drive(H,C)
     D_n   = nonphotic_drive(X, S)
-    D_p   = photic_drive(X, Y, P, IE, S, alpha)
-    W     = wake_effort(Q_v, forced = 0)
+    D_p   = photic_drive(X, Y, P, alpha)
+    W     = wake_effort(Q_v, forced) # normally forced = 0
     
     gradient_y = [(nu_vm*Q_m - V_v + D_v)/tau_v, # V_v, Postnova et al. 2018 - Table 1, Equation 1
                   (nu_mv*Q_v - V_m + D_m + W)/tau_m, # V_m, Postnova et al. 2018 - Table 1, Equation 2
