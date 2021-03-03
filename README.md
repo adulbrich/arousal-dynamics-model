@@ -14,9 +14,9 @@ Parameters and equations are taken from the papers.
 
 - [ ] Add license
 - [x] Add reference to equations as code comments
-- [ ] Implement the revised model (in progress)
-- [ ] Write unit tests
+- [x] Implement the revised model (in progress)
+- [ ] ? Write unit tests
 - [ ] Validate results
-- [ ] Clean up code
-- [ ] Package python code
-- [ ] Write R alternative
+- [x] Clean up code
+- [ ] ? Package python code
+- [ ] ? Write R alternative
