@@ -44,6 +44,8 @@ def wake_effort(Q_v, forced = 0):
     W = forced * max(0, V_WE-nu_mv*Q_v-D_m) # Postnova et al. 2018 - Table 1, Equation 8
     return W
 
+wake_effort_v = vectorize(wake_effort)
+
 def total_sleep_drive(H,C):
     # Total Sleep Drive Function
     # Inputs:
@@ -57,6 +59,8 @@ def total_sleep_drive(H,C):
     D_v = nu_vH*H + nu_vC*C + A_v # Postnova et al. 2018 - Table 1, Equation 9
     return D_v
 
+total_sleep_drive_v = vectorize(total_sleep_drive)
+
 def nonphotic_drive(X, S):
     # Nonphotic Drive to the Circadian Function
     # Inputs:
@@ -69,6 +73,8 @@ def nonphotic_drive(X, S):
 
     D_n = (S-(2.0/3.0))*(1-tanh(r*X)) # Postnova et al. 2018 - Table 1, Equation 11
     return D_n
+
+nonphotic_drive_v = vectorize(nonphotic_drive)
 
 def photoreceptor_conversion_rate(IE, S, version = '2018'): 
     # Photoreceptor Conversion Rate Function
@@ -95,6 +101,8 @@ def photoreceptor_conversion_rate(IE, S, version = '2018'):
 
     return alpha
 
+photoreceptor_conversion_rate_v = vectorize(photoreceptor_conversion_rate)
+
 def photic_drive(X, Y, P, alpha):
     # Photic Drive to the Circadian function
     # Inputs:
@@ -108,6 +116,8 @@ def photic_drive(X, Y, P, alpha):
 
     D_p = alpha*(1-P)*(1-epsilon*X)*(1-epsilon*Y) # Postnova et al. 2018 - Table 1, Equation 12
     return D_p
+
+photic_drive_v = vectorize(photic_drive)
 
 def mean_population_firing_rate(V_i):
     # Mean Population Firing Rate Function
@@ -123,6 +133,8 @@ def mean_population_firing_rate(V_i):
 
     Q = Q_max / (1 + exp((theta-V_i)/sigma_prime)) # Postnova et al. 2018 - Table 1, Equation 7
     return Q
+
+mean_population_firing_rate_v = vectorize(mean_population_firing_rate)
 
 def state(V_m): 
     # Wake/Sleep State Function
@@ -140,20 +152,24 @@ def state(V_m):
         S = 0
     return S
 
+state_v = vectorize(state)
+
 def sigmoid(E_emel):
     # sigmoid function
     # Inputs:
     #   E_emel: Melanopic Irradiance
     # Outputs:
-    #   S: sigmoid in range [0 1], is it always so?
+    #   S: sigmoid in range [0 1], is it always so? yes
 
     # parameters defining the melanopic irradiance value at half-maximal alerting effect and the steepness of the curve
     # Tekieh et al. 2020 - Section 2.3.3
     S_b = 0.05 # W/mˆ2
     S_c = 223.5 # mˆ2/W
 
-    S = 1/(1 + exp((S_b-E_emel)/S_c)) # Tekieh et al. 2020 - Equation 14
+    S = 1/(1 + exp((S_b-E_emel)/S_c) ) # Tekieh et al. 2020 - Equation 14
     return S
+
+sigmoid_v = vectorize(sigmoid)
 
 def alertness_measure(C, H, Theta_L = 0):
     # Alertness Measure Function
@@ -170,7 +186,7 @@ def alertness_measure(C, H, Theta_L = 0):
     Theta_0 = -24.34
     Theta_H =   2.28
     Theta_C =  -1.74
-    
+
     AM = Theta_0 + (Theta_H + Theta_L)*H + Theta_C*C # Postnova et al. 2018 - Equation 23, Tekieh et al. 2020 - Equation 12
     return AM
 
@@ -203,17 +219,16 @@ def melatonin_suppression(E_emel):
     r = 1 - (r_a/(1+power(E_emel/r_b,-r_c))) # Tekieh et al. 2020 - Equation 9
     return r
 
-def model(y, t, input_function, version = '2018'):
-    V_v, V_m, H, X, Y, P, Theta_L = y
+melatonin_suppression_v = vectorize(melatonin_suppression)
 
-    # Testing with forced wake between 20 and 23.5
-    if ((t/3600 % 24) > 20 and (t/3600 % 24) < 23.5):
-        forced = 1
-    else:
-        forced = 0
+def model(y, t, input_function, forced_wake, minE, maxE, version = '2020'):
+    V_v, V_m, H, X, Y, P, Theta_L = y
 
     IE    = input_function(t)
     S     = state(V_m) 
+    # so many things can go wrong with this sigmoid definition
+    # what's the threshold irradiance that creates a locally measurable impact on the KSS?
+    Sigmoid = ( sigmoid(IE) - sigmoid(minE) ) / ( sigmoid(maxE) - sigmoid(minE) ) # Tekieh et al. 2020 - Section 2.3.3: scaling to [0,1]
     alpha = photoreceptor_conversion_rate(IE, S, version)
     Q_m   = mean_population_firing_rate(V_m)
     Q_v   = mean_population_firing_rate(V_v)
@@ -221,7 +236,8 @@ def model(y, t, input_function, version = '2018'):
     D_v   = total_sleep_drive(H,C)
     D_n   = nonphotic_drive(X, S)
     D_p   = photic_drive(X, Y, P, alpha)
-    W     = wake_effort(Q_v, forced) # normally forced = 0
+    F_w   = forced_wake(t)
+    W     = wake_effort(Q_v, F_w)
     
     gradient_y = [(nu_vm*Q_m - V_v + D_v)/tau_v, # V_v, Postnova et al. 2018 - Table 1, Equation 1
                   (nu_mv*Q_v - V_m + D_m + W)/tau_m, # V_m, Postnova et al. 2018 - Table 1, Equation 2
@@ -229,6 +245,6 @@ def model(y, t, input_function, version = '2018'):
                   (Y + gamma*(X/3.0 + power(X,3)*4.0/3.0 - power(X,7)*256.0/105.0) + nu_Xp*D_p + nu_Xn*D_n)/tau_X, # X, Postnova et al. 2018 - Table 1, Equation 4
                   (D_p*(nu_YY*Y - nu_YX*X) - power((delta/tau_C),2)*X)/tau_Y, # Y, Postnova et al. 2018 - Table 1, Equation 5
                   alpha*(1-P)-(beta*P), # P, Postnova et al. 2018 - Table 1, Equation 6, revised
-                  (-Theta_L + nu_LA*sigmoid(IE))/tau_L # Tekieh et al. 2020 - Equation 13
+                  (-Theta_L + nu_LA*Sigmoid)/tau_L # Tekieh et al. 2020 - Equation 13
                  ] 
     return gradient_y
