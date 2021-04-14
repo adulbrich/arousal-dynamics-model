@@ -22,6 +22,7 @@ nu_YX = 0.55*nu_Xp
 nu_vH = 1.0
 nu_vC = -0.5 #mV
 nu_LA = -0.11 # Tekieh et al. 2020 - Section 3.3
+# nu_LA = -0.4 # testing: good results with -0.4
 
 # circadian constants: Postnova et al. 2018 - Table 1
 gamma = 0.13
@@ -76,7 +77,7 @@ def nonphotic_drive(X, S):
 
 nonphotic_drive_v = vectorize(nonphotic_drive)
 
-def photoreceptor_conversion_rate(IE, S, version = '2018'): 
+def photoreceptor_conversion_rate(IE, S, version = '2020'): 
     # Photoreceptor Conversion Rate Function
     # Inputs:
     #   I or E_emel: Illuminance (lux) or Melanopic Irradiance # Is it melanopic illuminance I_mel instead of just I?
@@ -154,7 +155,7 @@ def state(V_m):
 
 state_v = vectorize(state)
 
-def sigmoid(E_emel):
+def sigmoid(E_emel, version = '2020'):
     # sigmoid function
     # Inputs:
     #   E_emel: Melanopic Irradiance
@@ -165,6 +166,10 @@ def sigmoid(E_emel):
     # Tekieh et al. 2020 - Section 2.3.3
     S_b = 0.05 # W/mˆ2
     S_c = 223.5 # mˆ2/W
+
+    if (version == '2020'):
+        # sigmoig was defined for illuminance so we need to convert to illuminance for irradiance input in 2020 model
+        E_emel = E_emel/0.0013262 
 
     S = 1/(1 + exp((S_b-E_emel)/S_c) ) # Tekieh et al. 2020 - Equation 14
     return S
@@ -228,7 +233,7 @@ def model(y, t, input_function, forced_wake, minE, maxE, version = '2020'):
     S     = state(V_m) 
     # so many things can go wrong with this sigmoid definition
     # what's the threshold irradiance that creates a locally measurable impact on the KSS?
-    Sigmoid = ( sigmoid(IE) - sigmoid(minE) ) / ( sigmoid(maxE) - sigmoid(minE) ) # Tekieh et al. 2020 - Section 2.3.3: scaling to [0,1]
+    Sigmoid = ( sigmoid(IE, version) - sigmoid(minE, version) ) / ( sigmoid(maxE, version) - sigmoid(minE, version) ) # Tekieh et al. 2020 - Section 2.3.3: scaling to [0,1]
     alpha = photoreceptor_conversion_rate(IE, S, version)
     Q_m   = mean_population_firing_rate(V_m)
     Q_v   = mean_population_firing_rate(V_v)
