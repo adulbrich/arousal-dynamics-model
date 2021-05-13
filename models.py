@@ -155,7 +155,7 @@ def state(V_m):
 
 state_v = vectorize(state)
 
-def sigmoid(E_emel, version = '2020'):
+def sigmoid(E_emel):
     # sigmoid function
     # Inputs:
     #   E_emel: Melanopic Irradiance
@@ -167,9 +167,9 @@ def sigmoid(E_emel, version = '2020'):
     S_b = 0.05 # W/mˆ2
     S_c = 223.5 # mˆ2/W
 
-    if (version == '2020'):
-        # sigmoig was defined for illuminance so we need to convert to illuminance for irradiance input in 2020 model
-        E_emel = E_emel/0.0013262 
+    # the sigmoig was defined for illuminance initially, 
+    # but the parameters were then computed for irradiance so we can use irradiance directly
+    # E_emel = E_emel / 0.0013262 # test to transform irradiance to illuminance
 
     S = 1/(1 + exp((S_b-E_emel)/S_c) ) # Tekieh et al. 2020 - Equation 14
     return S
@@ -233,7 +233,7 @@ def model(y, t, input_function, forced_wake, minE, maxE, version = '2020'):
     S     = state(V_m) 
     # so many things can go wrong with this sigmoid definition
     # what's the threshold irradiance that creates a locally measurable impact on the KSS?
-    Sigmoid = ( sigmoid(IE, version) - sigmoid(minE, version) ) / ( sigmoid(maxE, version) - sigmoid(minE, version) ) # Tekieh et al. 2020 - Section 2.3.3: scaling to [0,1]
+    Sigmoid = ( sigmoid(IE) - sigmoid(minE) ) / ( sigmoid(maxE) - sigmoid(minE) ) # Tekieh et al. 2020 - Section 2.3.3: scaling to [0,1]
     alpha = photoreceptor_conversion_rate(IE, S, version)
     Q_m   = mean_population_firing_rate(V_m)
     Q_v   = mean_population_firing_rate(V_v)
