@@ -165,7 +165,7 @@ def sigmoid(E_emel):
     # parameters defining the melanopic irradiance value at half-maximal alerting effect and the steepness of the curve
     # Tekieh et al. 2020 - Section 2.3.3
     S_b = 0.05 # W/mˆ2
-    S_c = 223.5 # mˆ2/W
+    S_c = 1/223.5 # mˆ2/W, there is a typo in the paper, it should be S_cˆ{-1} = 223.5 mˆ2/W
 
     # the sigmoig was defined for illuminance initially, 
     # but the parameters were then computed for irradiance so we can use irradiance directly
