@@ -10,13 +10,15 @@ This repository aims at implementing the arousal dynamics model as described in:
 
 Parameters and equations are taken from the papers.
 
+Project led by Clotilde Pierson with the help of Alstan Jacubiek and the original authors. Implementation by Alexander Ulbrich.
+
 ## To Do
 
-- [ ] Add license
+- [x] Add license
+- [ ] Add copyright notices
 - [x] Add reference to equations as code comments
 - [x] Implement the revised model (in progress)
-- [ ] ? Write unit tests
-- [ ] Validate results
+- [ ] Write unit tests
+- [x] Validate results
 - [x] Clean up code
-- [ ] ? Package python code
-- [ ] ? Write R alternative
+- [ ] Package python code
