@@ -1,4 +1,4 @@
-# Implementation of the Arousal Dynamics Model
+# Light-Driven Arousal Dynamics Model
 
 This repository aims at implementing the arousal dynamics model as described in:
 
