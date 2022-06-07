@@ -10,7 +10,7 @@ This repository aims at implementing the arousal dynamics model as described in:
 
 Parameters and equations are taken from the papers.
 
-Project led by Clotilde Pierson with the help of Alstan Jacubiek and the original authors. Implementation by Alexander Ulbrich.
+Project led by Clotilde Pierson. Implementation by Alexander Ulbrich.
 
 ## To Do
 
