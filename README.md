@@ -12,6 +12,14 @@ Parameters and equations are taken from the papers.
 
 Project led by Clotilde Pierson. Implementation by Alexander Ulbrich.
 
+## Setup 
+
+We recommend working in a conda environment using miniconda:
+
+```sh
+conda create --name arousal --file requirements.txt
+```
+
 ## To Do
 
 - [x] Add license
