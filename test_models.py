@@ -7,6 +7,7 @@ from models import (
     nonphotic_drive,
     photoreceptor_conversion_rate,
     photic_drive,
+    circadian_phase,
     mean_population_firing_rate,
     state,
     sigmoid,
@@ -67,6 +68,12 @@ def test_photic_drive():
     assert photic_drive(-0.14, -1.07, 0.10, 0.00016) == 0.000217147392
     assert photic_drive(0.25, -1.07, 0.10, 0.00016) == 0.0001850688
     assert photic_drive(-0.14, 1.2, 0.10, 0.00016) == 7.907328000000001e-05
+
+def test_circadian_phase():
+    """Test circadian phase calculation function."""
+    # Test normal case
+    assert circadian_phase(-0.14, -1.07) == np.float64(1.4406942690849316)
+
 
 # def test_mean_population_firing_rate():
 #     """Test mean population firing rate calculation function."""

@@ -6,6 +6,8 @@ References: Postnova et al. 2018, Tekieh et al. 2020
 
 from numpy import pi
 
+CONVERSION_FACTOR = 754.0340838
+
 # Time constants for model (in seconds)
 TAU_V = 50.0  # s
 TAU_M = TAU_V
@@ -15,6 +17,7 @@ TAU_Y = TAU_X
 TAU_C = 24.2 * 3600.0  # s
 TAU_A = 1.5 * 3600.0  # s  # 1.5 hours - Tekieh et al. 2020
 TAU_L = 24.0 * 60.0  # s  # 24 min - Tekieh et al. 2020
+TAU_ALPHA = 3.11 * 3600 # s
 
 # Coupling strengths constants
 NU_VM = -2.1  # mV
@@ -64,6 +67,15 @@ S_C = 1 / 223.5  # m^2/W
 R_A = 1
 R_B = 0.031  # W/m^2
 R_C = 0.82
+
+# Melatonin synthesis
+PHI_ON = -1.44 # rad, SynOn
+PHI_OFF = 2.78 # rad, SynOff
+U_STAR = 0.47 # pmol/L/s, urine peak
+A_0 = U_STAR  # pmol/L/s, melatonin peak synthesis rate
+R_G = 0.9
+RHO_B_STAR = 325 # pmol/L, plasma peak
+T_U = 0.96 * 3600 # s, urine time lag
 
 # KSS parameters
 THETA_0 = -24.34
