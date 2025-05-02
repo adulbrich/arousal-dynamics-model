@@ -24,19 +24,9 @@ conda create --name arousal --file requirements.txt
 
 ## To Do
 
-- [x] Add license
-- [ ] Add copyright notices
-- [x] Add reference to equations as code comments
-- [x] Implement the revised model (in progress)
-- [ ] Write unit tests
-- [x] Validate results
-- [x] Clean up code
-- [ ] Package python code
-
-### Add Melatonin Concentration A(t)
-
-τA * dA(t)/dt = m(ϕ) * melatonin_suppression() - A(t)
-
-### Add urinary aMT6s
-
-TODO
+- [ ] Add references to equations for [Abeysuriya et al. 2018]
+- [ ] add debug flags
+- [ ] clean up old notebooks (won't run on current models.py)
+- [ ] add more unit tests, including comparison with original data if possible
+- [ ] have a notebook to run on scenarios and compare outputs (aMT6s, rho_b, KSS)
+- [ ] improve plots with better names for axes

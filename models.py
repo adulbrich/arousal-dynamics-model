@@ -264,7 +264,7 @@ def urinary_excretion_rate(rho_b_vector, t_values, t, delay=constants.T_U):
     """
     # Calculate the delayed time point
     t_delayed = t - delay
-    
+
     # Find the index of the closest time point in t_values 
     # that is not greater than t_delayed
     if t_delayed < t_values[0]:
@@ -275,10 +275,10 @@ def urinary_excretion_rate(rho_b_vector, t_values, t, delay=constants.T_U):
         idx = np.searchsorted(t_values, t_delayed, side='right') - 1
         idx = max(0, min(idx, len(rho_b_vector) - 1))  # Ensure index is in bounds
         rho_b_delayed = rho_b_vector[idx]
-    
+
     # Calculate urinary excretion rate
     u = constants.U_STAR * rho_b_delayed / constants.RHO_B_STAR
-    
+
     return u
 
 def forced_wake(t, waketime=6, bedtime=22):
