@@ -244,35 +244,36 @@ def melatonin_synthesis_regulation(phi):
 
 melatonin_synthesis_regulation_v = vectorize(melatonin_synthesis_regulation)
 
+
 def urinary_excretion_rate(rho_b_vector, t_values, t, delay=constants.T_U):
     """Calculate the urinary excretion rate of aMT6s
-    
+
     Inputs:
         rho_b_vector: vector of aMT6s concentrations in blood
         t_values: corresponding time points for rho_b_vector
         t: current time point to calculate excretion rate for
         delay: time delay in seconds (default from constants.T_U)
-        
+
     Outputs:
         u: urinary excretion rate of aMT6s
-    
+
     The function returns the excretion rate according to:
     u(t) = U_STAR * rho_b(t - T_U) / RHO_B_STAR
-    
+
     If the delayed time point is before the start of the simulation,
     the function will use the earliest available blood concentration.
     """
     # Calculate the delayed time point
     t_delayed = t - delay
 
-    # Find the index of the closest time point in t_values 
+    # Find the index of the closest time point in t_values
     # that is not greater than t_delayed
     if t_delayed < t_values[0]:
         # If the delayed time is before simulation start, use the first value
         rho_b_delayed = rho_b_vector[0]
     else:
         # Find the index of the closest time point that's not greater than t_delayed
-        idx = np.searchsorted(t_values, t_delayed, side='right') - 1
+        idx = np.searchsorted(t_values, t_delayed, side="right") - 1
         idx = max(0, min(idx, len(rho_b_vector) - 1))  # Ensure index is in bounds
         rho_b_delayed = rho_b_vector[idx]
 
@@ -280,6 +281,7 @@ def urinary_excretion_rate(rho_b_vector, t_values, t, delay=constants.T_U):
     u = constants.U_STAR * rho_b_delayed / constants.RHO_B_STAR
 
     return u
+
 
 def forced_wake(t, waketime=6, bedtime=22):
     """Forced Wake Function
@@ -300,25 +302,67 @@ def forced_wake(t, waketime=6, bedtime=22):
 forced_wake_v = vectorize(forced_wake)
 
 
-def irradiance(t, input_irradiance, waketime=6, bedtime=22):
+def irradiance(
+    t,
+    input_irradiance,
+    waketime=6,
+    bedtime=22,
+    morning_cutoff=7.5,
+    afternoon_cutoff=17,
+    evening_cutoff=19,
+    default_night_exposure=0,
+    default_day_exposure=50,
+    default_evening_exposure=10,
+    ramp=True,
+):
     """Irradiance Function
     Inputs:
         t: time in seconds
         input_irradiance: input irradiance data
+        waketime: time to wake up in hours
+        bedtime: time to sleep in hours
+        morning_cutoff: time to start morning light exposure in hours
+        afternoon_cutoff: time to start afternoon light exposure in hours
+        evening_cutoff: time to start evening light exposure in hours
+        default_night_exposure: default night exposure in lux
+        default_day_exposure: default day exposure in lux
+        default_evening_exposure: default evening exposure in lux
     Outputs:
-        E_emel: Melanopic Irradiance
+        output_irradiance: Melanopic Irradiance
     """
 
     t = t % (24 * 3600)
 
     if t <= waketime * 3600 or t >= bedtime * 3600:
-        E_emel = 0
-    elif t < 7.5 * 3600:
-        E_emel = ((t - waketime * 3600) / 3600 / 1.5 * 50) / constants.CONVERSION_FACTOR
-    elif t > 17 * 3600 and t < 19 * 3600:
-        E_emel = (50 - ((t - 17 * 3600) / 3600 / 2 * 40)) / constants.CONVERSION_FACTOR
-    elif t > 19 * 3600 and t < bedtime * 3600:
-        E_emel = 10 / constants.CONVERSION_FACTOR
+        output_irradiance = default_night_exposure / constants.CONVERSION_FACTOR
+    elif t < morning_cutoff * 3600:
+        if ramp:
+            output_irradiance = (
+                default_night_exposure
+                + (
+                    (t - waketime * 3600)
+                    / 3600
+                    / (morning_cutoff - waketime)
+                    * default_day_exposure
+                )
+            ) / constants.CONVERSION_FACTOR
+        else:
+            output_irradiance = default_day_exposure / constants.CONVERSION_FACTOR
+    elif t > afternoon_cutoff * 3600 and t < evening_cutoff * 3600:
+        if ramp:
+            output_irradiance = (
+                default_day_exposure
+                - (
+                    (t - afternoon_cutoff * 3600)
+                    / 3600
+                    / (evening_cutoff - afternoon_cutoff)
+                    * (default_day_exposure - default_evening_exposure)
+                )
+            ) / constants.CONVERSION_FACTOR
+        else:
+            output_irradiance = default_day_exposure / constants.CONVERSION_FACTOR
+    elif t > evening_cutoff * 3600 and t < bedtime * 3600:
+        output_irradiance = default_evening_exposure / constants.CONVERSION_FACTOR
     else:
         csv_hours = input_irradiance["hours"].values
         csv_irradiance_mel = input_irradiance["irradiance_mel"].values
@@ -330,15 +374,46 @@ def irradiance(t, input_irradiance, waketime=6, bedtime=22):
             bounds_error=False,
             fill_value=(csv_irradiance_mel[0], csv_irradiance_mel[-1]),
         )
-        E_emel = interpolator(t / 3600)
+        output_irradiance = interpolator(t / 3600)
 
-    return E_emel
+    return output_irradiance
 
 
-def model(y, t, input_irradiance, waketime, bedtime, minE, maxE, version="2020"):
+def model(
+    y,
+    t,
+    input_irradiance,
+    waketime=6,
+    bedtime=22,
+    morning_cutoff=7.5,
+    afternoon_cutoff=17,
+    evening_cutoff=19,
+    default_night_exposure=0,
+    default_day_exposure=50,
+    default_evening_exposure=10,
+    ramp=True,
+    minE=0,
+    maxE=1000,
+    version="2020",
+):
+    """
+    Arousal Dynamics Model
+    """
     V_v, V_m, H, X, Y, P, Theta_L, A, rho_b = y
 
-    IE = irradiance(t, input_irradiance, waketime, bedtime)
+    IE = irradiance(
+        t,
+        input_irradiance,
+        waketime,
+        bedtime,
+        morning_cutoff,
+        afternoon_cutoff,
+        evening_cutoff,
+        default_night_exposure,
+        default_day_exposure,
+        default_evening_exposure,
+        ramp
+    )
     S = state(V_m)
     Sigmoid = (sigmoid(IE) - sigmoid(minE)) / (sigmoid(maxE) - sigmoid(minE))
     alpha = photoreceptor_conversion_rate(IE, S, version)
@@ -395,6 +470,13 @@ def model_run(
     input_irradiance,
     waketime=6,
     bedtime=22,
+    morning_cutoff=7.5,
+    afternoon_cutoff=17,
+    evening_cutoff=19,
+    default_night_exposure=0,
+    default_day_exposure=50,
+    default_evening_exposure=10,
+    ramp=True,
     minE=0,
     maxE=1000,
     debug=False,
@@ -413,7 +495,20 @@ def model_run(
     if debug:
         # Generate irradiance values for all time points
         irr_values = [
-            irradiance(time, input_irradiance, waketime, bedtime) for time in t
+            irradiance(
+                time,
+                input_irradiance,
+                waketime,
+                bedtime,
+                morning_cutoff,
+                afternoon_cutoff,
+                evening_cutoff,
+                default_night_exposure,
+                default_day_exposure,
+                default_evening_exposure,
+                ramp,
+            )
+            for time in t
         ]
 
         # Convert time from seconds to hours for better readability
@@ -459,6 +554,13 @@ def model_run(
             input_irradiance,
             waketime,
             bedtime,
+            morning_cutoff,
+            afternoon_cutoff,
+            evening_cutoff,
+            default_night_exposure,
+            default_day_exposure,
+            default_evening_exposure,
+            ramp,
             minE,
             maxE,
             version_year,
