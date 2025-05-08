@@ -16,6 +16,7 @@ def wake_effort(Q_v, forced=0):
         forced: 1 if forced wake, default 0
     Outputs:
         W: wake effort
+    Table 1 Equation 8 in [Postnova et al. 2018]
     """
     W = forced * max(
         0,
@@ -35,6 +36,7 @@ def total_sleep_drive(H, C):
         C: circadian drive, sleep propensity model
     Outputs:
         D_v:  total sleep drive
+    Table 1 Equation 9 in [Postnova et al. 2018]
     """
     D_v = constants.NU_VH * H + constants.NU_VC * C + constants.A_V
     return D_v
@@ -50,6 +52,7 @@ def nonphotic_drive(X, S):
         S: Wake = 1 or Sleep = 0 state
     Outputs:
         D_n: nonphotic drive to the circadian
+    Table 1 Equation 11 in [Postnova et al. 2018]
     """
     D_n = (S - (2.0 / 3.0)) * (1 - tanh(constants.R * X))
     return D_n
@@ -66,6 +69,8 @@ def photoreceptor_conversion_rate(IE, S, version="2020"):
         version: 2018 uses Illuminance, 2020 uses melanopic irradiance
     Outputs:
         alpha: the photorecpetor conversion rate
+    Table 1 Equation 13 in [Postnova et al. 2018] for 2018 version
+    Equation 7 in [Tekieh et al. 2020] for 2020 version
     """
 
     IE = IE * S
@@ -96,6 +101,7 @@ def photic_drive(X, Y, P, alpha):
         alpha: photoreceptor conversion rate
     Outputs:
         D_p: photic drive to the circadian
+    Table 1 Equation 12 in [Postnova et al. 2018]
     """
 
     D_p = alpha * (1 - P) * (1 - constants.EPSILON * X) * (1 - constants.EPSILON * Y)
@@ -111,6 +117,7 @@ def mean_population_firing_rate(V_i):
         V_i: V_v or V_m, mean voltages of the VLPO or MA respectively
     Outputs:
         Q: mean population firing rate
+    Table 1 Equation 7 in [Postnova et al. 2018]
     """
 
     Q = constants.Q_MAX / (1 + exp((constants.THETA - V_i) / constants.SIGMA_PRIME))
@@ -126,6 +133,7 @@ def state(V_m):
         V_m: Mean Voltage of the monoaminergic (MA) wake-active neuronal populations
     Outputs:
         S: sleep state, 1 is awake, 0 is asleep
+    Table 1 Equation 15 in [Postnova et al. 2018]
     """
 
     if V_m > constants.V_TH:
@@ -144,6 +152,7 @@ def sigmoid(E_emel):
         E_emel: Melanopic Irradiance
     Outputs:
         S: sigmoid in range [0 1]
+    Equation 14 in [Tekieh et al. 2020]
     """
 
     S = 1 / (1 + exp((constants.S_B - E_emel) / constants.S_C))
@@ -161,6 +170,7 @@ def alertness_measure(C, H, Theta_L=0):
         Theta_L: light-dependent modulation of the homeostatic weight
     Outputs:
         AM: alertness measure on the KSS
+    Equation 12 in [Tekieh et al. 2020]
     """
 
     AM = constants.THETA_0 + (constants.THETA_H + Theta_L) * H + constants.THETA_C * C
@@ -176,6 +186,7 @@ def circadian_drive(X, Y):
         X, Y: Circadian Variables
     Outputs:
         C: circadian drive
+    Table 1 Equation 10 in [Postnova et al. 2018]
     """
 
     C = 0.1 * ((1.0 + X) / 2.0) + power(
@@ -193,6 +204,8 @@ def melatonin_suppression(E_emel):
         E_emel: Melanopic Irradiance
     Outputs:
         r: melatonin suppression
+
+    Equation 4 in [Abeysuriya et al. 2018]
     """
 
     r = 1 - (
@@ -217,6 +230,8 @@ def circadian_phase(X, Y):
         X, Y: Circadian Variables
     Outputs:
         phi: circadian phase
+
+    Table 1 Equation 17 in [Postnova et al. 2018]
     """
 
     phi = atan(Y / X)
@@ -232,6 +247,8 @@ def melatonin_synthesis_regulation(phi):
         phi: circadian phase
     Outputs:
         m_phi: melatonin synthesis regulation
+
+    Equation 2 in [Abeysuriya et al. 2018]
     """
 
     if constants.PHI_ON <= phi <= constants.PHI_OFF:
@@ -259,6 +276,8 @@ def urinary_excretion_rate(rho_b_vector, t_values, t, delay=constants.T_U):
 
     The function returns the excretion rate according to:
     u(t) = U_STAR * rho_b(t - T_U) / RHO_B_STAR
+
+    Equation 15 in [Abeysuriya et al. 2018]
 
     If the delayed time point is before the start of the simulation,
     the function will use the earliest available blood concentration.
@@ -291,6 +310,8 @@ def forced_wake(t, waketime=6, bedtime=22):
         bedtime: time to sleep in hours
     Outputs:
         F_w: forced wake, 1 if forced wake, 0 if not
+
+    Table 1 in [Postnova et al. 2018]
     """
     if (t / 3600 % 24) >= waketime and (t / 3600 % 24) <= bedtime:
         F_w = 1
@@ -329,6 +350,8 @@ def irradiance(
         default_evening_exposure: default evening exposure in lux
     Outputs:
         output_irradiance: Melanopic Irradiance
+    
+    The default shape of the irradiance curve is dictated by C. Pierson.
     """
 
     t = t % (24 * 3600)
@@ -415,7 +438,7 @@ def model(
         ramp
     )
     S = state(V_m)
-    Sigmoid = (sigmoid(IE) - sigmoid(minE)) / (sigmoid(maxE) - sigmoid(minE))
+    Sigmoid = (sigmoid(IE) - sigmoid(minE)) / (sigmoid(maxE) - sigmoid(minE)) # !!!
     alpha = photoreceptor_conversion_rate(IE, S, version)
     Q_m = mean_population_firing_rate(V_m)
     Q_v = mean_population_firing_rate(V_v)
@@ -430,9 +453,9 @@ def model(
     m_phi = melatonin_synthesis_regulation(phi)
 
     gradient_y = [
-        (constants.NU_VM * Q_m - V_v + D_v) / constants.TAU_V,
-        (constants.NU_MV * Q_v - V_m + constants.D_M + W) / constants.TAU_M,
-        (constants.NU_HM * Q_m - H) / constants.TAU_H,
+        (constants.NU_VM * Q_m - V_v + D_v) / constants.TAU_V, # Table 1 Equation 1 in [Postnova et al. 2018]
+        (constants.NU_MV * Q_v - V_m + constants.D_M + W) / constants.TAU_M, # Table 1 Equation 2 in [Postnova et al. 2018]
+        (constants.NU_HM * Q_m - H) / constants.TAU_H, # Table 1 Equation 3 in [Postnova et al. 2018]
         (
             Y
             + constants.GAMMA
@@ -440,7 +463,7 @@ def model(
             + constants.NU_XP * D_p
             + constants.NU_XN * D_n
         )
-        / constants.TAU_X,
+        / constants.TAU_X, # Table 1 Equation 4 in [Postnova et al. 2018]
         (
             D_p * (constants.NU_YY * Y - constants.NU_YX * X)
             - power(
@@ -449,11 +472,11 @@ def model(
             )
             * X
         )
-        / constants.TAU_Y,
-        alpha * (1 - P) - (constants.BETA * P),
-        (-Theta_L + constants.NU_LA * Sigmoid) / constants.TAU_L,
-        (m_phi * r - A) / constants.TAU_ALPHA,
-        (constants.U_STAR / constants.R_G) * (A - rho_b / constants.RHO_B_STAR),
+        / constants.TAU_Y, # Table 1 Equation 5 in [Postnova et al. 2018]
+        alpha * (1 - P) - (constants.BETA * P), # Table 1 Equation 6 in [Postnova et al. 2018]
+        (-Theta_L + constants.NU_LA * Sigmoid) / constants.TAU_L, # Equation 13 in [Tekieh et al. 2020]
+        (m_phi * r - A) / constants.TAU_ALPHA, # Equation 1 in [Abeysuriya et al. 2018]
+        (constants.U_STAR / constants.R_G) * (A - rho_b / constants.RHO_B_STAR), # Equation 14 in [Abeysuriya et al. 2018]
     ]
     return gradient_y
 
