@@ -22,6 +22,12 @@ We recommend working in a conda environment using miniconda:
 conda create --name arousal --file requirements.txt
 ```
 
+Once the environment is setup, activate:
+
+```sh
+conda activate arousal
+```
+
 ## To Do
 
 - [ ] Add references to equations for [Abeysuriya et al. 2018]

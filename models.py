@@ -334,7 +334,7 @@ def irradiance(
     default_night_exposure=0,
     default_day_exposure=50,
     default_evening_exposure=10,
-    ramp=True,
+    ramp=False,
 ):
     """Irradiance Function
     Inputs:
@@ -414,7 +414,7 @@ def model(
     default_night_exposure=0,
     default_day_exposure=50,
     default_evening_exposure=10,
-    ramp=True,
+    ramp=False,
     minE=0,
     maxE=1000,
     version="2020",
@@ -499,7 +499,7 @@ def model_run(
     default_night_exposure=0,
     default_day_exposure=50,
     default_evening_exposure=10,
-    ramp=True,
+    ramp=False,
     minE=0,
     maxE=1000,
     debug=False,
