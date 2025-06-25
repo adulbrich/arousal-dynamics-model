@@ -30,7 +30,7 @@ conda activate arousal
 
 ## To Do
 
-- [ ] Add references to equations for [Abeysuriya et al. 2018]
+- [ ] optimize for S_b and S_c constants for daytime
 - [ ] add debug flags where relevant
 - [ ] clean up old notebooks (won't run on current models.py)
 - [ ] add more unit tests, including comparison with original data if possible

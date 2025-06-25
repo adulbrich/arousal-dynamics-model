@@ -7,7 +7,6 @@ from scipy.interpolate import interp1d
 import matplotlib.pyplot as plt
 import constants
 
-
 def wake_effort(Q_v, forced=0):
     """
     Wake Effort Function
@@ -207,19 +206,8 @@ def melatonin_suppression(E_emel):
 
     Equation 4 in [Abeysuriya et al. 2018]
     """
-
-    r = 1 - (
-        constants.R_A
-        / (
-            1
-            + power(
-                E_emel / constants.R_B,
-                -constants.R_C,
-            )
-        )
-    )
+    r = 1 - constants.R_A / (1 + exp( - (E_emel - constants.R_B) / constants.R_C))
     return r
-
 
 melatonin_suppression_v = vectorize(melatonin_suppression)
 
@@ -325,120 +313,35 @@ forced_wake_v = vectorize(forced_wake)
 
 def irradiance(
     t,
-    input_irradiance,
-    waketime=6,
-    bedtime=22,
-    morning_cutoff=7.5,
-    afternoon_cutoff=17,
-    evening_cutoff=19,
-    default_night_exposure=0,
-    default_day_exposure=50,
-    default_evening_exposure=10,
-    ramp=False,
+    interpolator,
 ):
     """Irradiance Function
     Inputs:
         t: time in seconds
         input_irradiance: input irradiance data
-        waketime: time to wake up in hours
-        bedtime: time to sleep in hours
-        morning_cutoff: time to start morning light exposure in hours
-        afternoon_cutoff: time to start afternoon light exposure in hours
-        evening_cutoff: time to start evening light exposure in hours
-        default_night_exposure: default night exposure in lux
-        default_day_exposure: default day exposure in lux
-        default_evening_exposure: default evening exposure in lux
     Outputs:
         output_irradiance: Melanopic Irradiance
-    
-    The default shape of the irradiance curve is dictated by C. Pierson.
     """
 
-    t = t % (24 * 3600)
-
-    if t <= waketime * 3600 or t >= bedtime * 3600:
-        output_irradiance = default_night_exposure / constants.CONVERSION_FACTOR
-    elif t < morning_cutoff * 3600:
-        if ramp:
-            output_irradiance = (
-                default_night_exposure
-                + (
-                    (t - waketime * 3600)
-                    / 3600
-                    / (morning_cutoff - waketime)
-                    * default_day_exposure
-                )
-            ) / constants.CONVERSION_FACTOR
-        else:
-            output_irradiance = default_day_exposure / constants.CONVERSION_FACTOR
-    elif t > afternoon_cutoff * 3600 and t < evening_cutoff * 3600:
-        if ramp:
-            output_irradiance = (
-                default_day_exposure
-                - (
-                    (t - afternoon_cutoff * 3600)
-                    / 3600
-                    / (evening_cutoff - afternoon_cutoff)
-                    * (default_day_exposure - default_evening_exposure)
-                )
-            ) / constants.CONVERSION_FACTOR
-        else:
-            output_irradiance = default_day_exposure / constants.CONVERSION_FACTOR
-    elif t > evening_cutoff * 3600 and t < bedtime * 3600:
-        output_irradiance = default_evening_exposure / constants.CONVERSION_FACTOR
-    else:
-        csv_hours = input_irradiance["hours"].values
-        csv_irradiance_mel = input_irradiance["irradiance_mel"].values
-
-        interpolator = interp1d(
-            csv_hours,
-            csv_irradiance_mel,
-            kind="cubic",
-            bounds_error=False,
-            fill_value=(csv_irradiance_mel[0], csv_irradiance_mel[-1]),
-        )
-        output_irradiance = interpolator(t / 3600)
-
-    return output_irradiance
-
+    return max(interpolator(t),0)
 
 def model(
     y,
     t,
-    input_irradiance,
+    interpolator,
     waketime=6,
     bedtime=22,
-    morning_cutoff=7.5,
-    afternoon_cutoff=17,
-    evening_cutoff=19,
-    default_night_exposure=0,
-    default_day_exposure=50,
-    default_evening_exposure=10,
-    ramp=False,
-    minE=0,
-    maxE=1000,
     version="2020",
 ):
     """
     Arousal Dynamics Model
     """
     V_v, V_m, H, X, Y, P, Theta_L, A, rho_b = y
-
-    IE = irradiance(
-        t,
-        input_irradiance,
-        waketime,
-        bedtime,
-        morning_cutoff,
-        afternoon_cutoff,
-        evening_cutoff,
-        default_night_exposure,
-        default_day_exposure,
-        default_evening_exposure,
-        ramp
-    )
+    
+    IE = irradiance(t, interpolator)
     S = state(V_m)
-    Sigmoid = (sigmoid(IE) - sigmoid(minE)) / (sigmoid(maxE) - sigmoid(minE)) # !!!
+    # Sigmoid = (sigmoid(IE) - sigmoid(minE)) / (sigmoid(maxE) - sigmoid(minE)) # !!! # minE=0, maxE=1000
+    Sigmoid = sigmoid(IE)
     alpha = photoreceptor_conversion_rate(IE, S, version)
     Q_m = mean_population_firing_rate(V_m)
     Q_v = mean_population_firing_rate(V_v)
@@ -480,60 +383,69 @@ def model(
     ]
     return gradient_y
 
-
-# def model_2018(y, t, input_function, forced_wake, minE, maxE):
-#     return model(y, t, input_function, forced_wake, minE, maxE, version="2018")
-# def model_2020(y, t, input_function, forced_wake, minE, maxE):
-#     return model(y, t, input_function, forced_wake, minE, maxE, version="2020")
-
-
 def model_run(
     days,
     steps,
-    input_irradiance,
+    input_irradiance=None,
+    time_points=None,
+    interpolator=None,
     waketime=6,
     bedtime=22,
-    morning_cutoff=7.5,
-    afternoon_cutoff=17,
-    evening_cutoff=19,
-    default_night_exposure=0,
-    default_day_exposure=50,
-    default_evening_exposure=10,
-    ramp=False,
-    minE=0,
-    maxE=1000,
     debug=False,
 ):
     """
     Run the model with default parameters.
+    Inputs:
+        days: number of days to simulate
+        steps: number of time steps
+        input_irradiance: input irradiance data (optional)
+        time_points: corresponding time points for input_irradiance, in seconds (optional)
+        interpolator: pre-defined interpolator for input_irradiance (optional)
+        waketime: time to wake up in hours (default 6)
+        bedtime: time to sleep in hours (default 22)
+    Outputs:
+        sol: solution of the model, an array of shape (steps, 9)
+        t: time points in seconds, an array of shape (steps,)
+    This function integrates the model over the specified number of days and steps.
+    It uses either the provided input irradiance and timepoints to create an interpolator, or it uses a pre-defined interpolator.
+    If no input irradiance is provided, it raises a ValueError.
     """
     # Define initial conditions
-    y0 = [-4.55, -0.07, 13.29, -0.14, -1.07, 0.10, -5.00e-06, 0, 25]
+    y0 = [-4.55, -0.07, 13.29, -0.14, -1.07, 0.10, 0, 0, 25]
 
-    # Define time points
+    if input_irradiance is None and time_points is None and interpolator is None:
+        raise ValueError(
+            "At least one of input_irradiance and time_points, or interpolator must be provided."
+        )
+
+    if input_irradiance is not None and time_points is not None:
+        if len(input_irradiance) != len(time_points) and interpolator is None:
+            raise ValueError(
+                "Input irradiance must have the same length as time points."
+            )
+        if interpolator is None:
+            interpolator = interp1d(time_points, input_irradiance, kind='cubic', bounds_error=False,
+                                fill_value=(input_irradiance[0], input_irradiance[-1]))
+
+    # Define time points in seconds
     t = np.linspace(0, days * 24 * 60 * 60, steps)
+
+    # Not needed?
+    # if len(input_irradiance) != len(t):
+    #     raise ValueError(
+    #         "Input irradiance must have the same length as time points."
+    #     )
 
     version_year = "2020"  # or "2018"
 
     if debug:
-        # Generate irradiance values for all time points
         irr_values = [
             irradiance(
                 time,
-                input_irradiance,
-                waketime,
-                bedtime,
-                morning_cutoff,
-                afternoon_cutoff,
-                evening_cutoff,
-                default_night_exposure,
-                default_day_exposure,
-                default_evening_exposure,
-                ramp,
+                interpolator
             )
             for time in t
         ]
-
         # Convert time from seconds to hours for better readability
         t_hours = t / 3600
 
@@ -574,18 +486,9 @@ def model_run(
         y0,
         t,
         args=(
-            input_irradiance,
+            interpolator,
             waketime,
             bedtime,
-            morning_cutoff,
-            afternoon_cutoff,
-            evening_cutoff,
-            default_night_exposure,
-            default_day_exposure,
-            default_evening_exposure,
-            ramp,
-            minE,
-            maxE,
             version_year,
         ),
         full_output=True,

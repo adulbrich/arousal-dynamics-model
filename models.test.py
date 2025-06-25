@@ -1,6 +1,5 @@
 import pytest
 import numpy as np
-from numpy import exp, pi
 from models import (
     wake_effort,
     total_sleep_drive,
@@ -8,12 +7,14 @@ from models import (
     photoreceptor_conversion_rate,
     photic_drive,
     circadian_phase,
-    mean_population_firing_rate,
-    state,
-    sigmoid,
-    circadian_drive,
-    model
+    # mean_population_firing_rate,
+    # state,
+    # sigmoid,
+    # circadian_drive,
+    # model
 )
+
+# TODO: update for latest revision of models.py
 
 @pytest.fixture
 def model_state():

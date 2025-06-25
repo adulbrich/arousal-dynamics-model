@@ -17,6 +17,7 @@ TAU_Y = TAU_X
 TAU_C = 24.2 * 3600.0  # s
 TAU_A = 1.5 * 3600.0  # s  # 1.5 hours - Tekieh et al. 2020
 TAU_L = 24.0 * 60.0  # s  # 24 min - Tekieh et al. 2020
+# TAU_L = 24.0
 TAU_ALPHA = 3.11 * 3600 # s
 
 # Coupling strengths constants
@@ -61,7 +62,7 @@ R = 10.0
 
 # Sigmoid function parameters
 S_B = 0.05  # W/m^2
-S_C = 1 / 223.5  # m^2/W
+S_C = 1.0 / 223.5  # W/m^2 (typo corrected from paper)
 
 # Melatonin suppression parameters
 R_A = 1
