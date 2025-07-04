@@ -329,6 +329,10 @@ def model(
     y,
     t,
     interpolator,
+    S_B,
+    S_C,
+    NU_LA,
+    TAU_L,
     waketime=6,
     bedtime=22,
     version="2020",
@@ -341,7 +345,7 @@ def model(
     IE = irradiance(t, interpolator)
     S = state(V_m)
     # Sigmoid = (sigmoid(IE) - sigmoid(minE)) / (sigmoid(maxE) - sigmoid(minE)) # !!! # minE=0, maxE=1000
-    Sigmoid = sigmoid(IE)
+    Sigmoid = sigmoid(IE, S_B, S_C)
     alpha = photoreceptor_conversion_rate(IE, S, version)
     Q_m = mean_population_firing_rate(V_m)
     Q_v = mean_population_firing_rate(V_v)
@@ -377,7 +381,7 @@ def model(
         )
         / constants.TAU_Y, # Table 1 Equation 5 in [Postnova et al. 2018]
         alpha * (1 - P) - (constants.BETA * P), # Table 1 Equation 6 in [Postnova et al. 2018]
-        (-Theta_L + constants.NU_LA * Sigmoid) / constants.TAU_L, # Equation 13 in [Tekieh et al. 2020]
+        (-Theta_L + NU_LA * Sigmoid) / TAU_L, # Equation 13 in [Tekieh et al. 2020]
         (m_phi * r - A) / constants.TAU_ALPHA, # Equation 1 in [Abeysuriya et al. 2018]
         (constants.U_STAR / constants.R_G) * (A - rho_b / constants.RHO_B_STAR), # Equation 14 in [Abeysuriya et al. 2018]
     ]
@@ -389,6 +393,10 @@ def model_run(
     input_irradiance=None,
     time_points=None,
     interpolator=None,
+    S_B=constants.S_B,
+    S_C=constants.S_C,
+    NU_LA=constants.NU_LA,
+    TAU_L=constants.TAU_L,
     waketime=6,
     bedtime=22,
     debug=False,
@@ -487,6 +495,10 @@ def model_run(
         t,
         args=(
             interpolator,
+            S_B,
+            S_C,
+            NU_LA,
+            TAU_L,
             waketime,
             bedtime,
             version_year,
