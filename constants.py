@@ -17,7 +17,6 @@ TAU_Y = TAU_X
 TAU_C = 24.2 * 3600.0  # s
 TAU_A = 1.5 * 3600.0  # s  # 1.5 hours - Tekieh et al. 2020
 TAU_L = 24.0 * 60.0  # s  # 24 min - Tekieh et al. 2020
-# TAU_L = 24.0
 TAU_ALPHA = 3.11 * 3600 # s
 
 # Coupling strengths constants
@@ -31,7 +30,6 @@ NU_YX = 0.55 * 37.0 * 60.0  # calculated from NU_XP
 NU_VH = 1.0
 NU_VC = -0.5  # mV
 NU_LA = -0.11  # Tekieh et al. 2020
-# NU_LA = -1.619739
 
 # Circadian rhythm constants
 GAMMA = 0.13
@@ -62,11 +60,8 @@ F_4100K = 8.19e-4  # Tekieh et al. 2020
 R = 10.0
 
 # Sigmoid function parameters
-# S_B = 0.05  # W/m^2
-# S_C = 1.0 / 223.5  # W/m^2 (typo corrected from paper)
-
-S_B = 0.3
-S_C = 0.01604672 
+S_B = 0.05  # W/m^2
+S_C = 1.0 / 223.5  # W/m^2 (typo corrected from paper)
 
 # Melatonin suppression parameters
 R_A = 1
