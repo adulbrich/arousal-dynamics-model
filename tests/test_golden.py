@@ -60,6 +60,19 @@ def _trajectory_tolerances(data: dict[str, np.ndarray]) -> dict[str, dict[str, f
     return tolerances
 
 
+def _each(f: Callable[..., float], *args: object) -> np.ndarray:
+    """Call a legacy scalar function element by element, as the ODE calls it.
+
+    Not through the legacy `*_v` wrappers: `np.vectorize` takes its output
+    dtype from the first result, and `wake_effort` returns the integer 0 there,
+    which truncates every later value to an integer.
+    """
+    arrays = np.broadcast_arrays(*(np.asarray(a) for a in args))
+    return np.array(
+        [f(*row) for row in zip(*(a.ravel() for a in arrays), strict=True)], dtype=float
+    )
+
+
 @dataclass(frozen=True)
 class Scenario:
     """A light input and a sleep window, as the legacy `model_run` takes them."""
@@ -156,10 +169,10 @@ def _run_legacy(scenario: Scenario) -> dict[str, np.ndarray]:
     out = {name: sol[:, i] for i, name in enumerate(STATE_NAMES)}
     out["t"] = t
     out["light"] = np.array([models.irradiance(ti, interpolator) for ti in t], dtype=float)
-    out["S"] = models.state_v(out["V_m"]).astype(float)
-    out["C"] = models.circadian_drive_v(out["X"], out["Y"])
-    out["KSS"] = models.alertness_measure_v(out["C"], out["H"], out["Theta_L"])
-    out["phi"] = models.circadian_phase_v(out["X"], out["Y"])
+    out["S"] = _each(models.state, out["V_m"])
+    out["C"] = _each(models.circadian_drive, out["X"], out["Y"])
+    out["KSS"] = _each(models.alertness_measure, out["C"], out["H"], out["Theta_L"])
+    out["phi"] = _each(models.circadian_phase, out["X"], out["Y"])
     out["aMT6s"] = np.array([models.urinary_excretion_rate(out["rho_b"], t, ti) for ti in t])
     return out
 
@@ -198,25 +211,25 @@ def _legacy_equations() -> dict[str, np.ndarray]:
     phase_x = np.where(np.abs(xs) < 1e-9, 1e-3, xs)
 
     return {
-        "wake_effort_forced": models.wake_effort_v(q, 1),
-        "wake_effort_free": models.wake_effort_v(q, 0),
-        "total_sleep_drive": models.total_sleep_drive_v(h, _grid(0.0, 2.0)),
-        "nonphotic_drive_wake": models.nonphotic_drive_v(xs, 1),
-        "nonphotic_drive_sleep": models.nonphotic_drive_v(xs, 0),
-        "photoreceptor_2020_wake": models.photoreceptor_conversion_rate_v(e, 1, "2020"),
-        "photoreceptor_2020_sleep": models.photoreceptor_conversion_rate_v(e, 0, "2020"),
-        "photoreceptor_2018_wake": models.photoreceptor_conversion_rate_v(lux, 1, "2018"),
-        "photic_drive": models.photic_drive_v(xs, ys, p, alpha),
-        "firing_rate": models.mean_population_firing_rate_v(v),
-        "state": models.state_v(v).astype(float),
-        "sigmoid": models.sigmoid_v(e),
-        "alertness": models.alertness_measure_v(_grid(0.0, 2.0), h, theta_l),
-        "circadian_drive": models.circadian_drive_v(xs, ys),
-        "melatonin_suppression": models.melatonin_suppression_v(e),
-        "circadian_phase": models.circadian_phase_v(phase_x, ys),
-        "melatonin_synthesis": models.melatonin_synthesis_regulation_v(phi).astype(float),
-        "forced_wake_6_22": models.forced_wake_v(t, 6, 22).astype(float),
-        "forced_wake_8_20": models.forced_wake_v(t, 8, 20).astype(float),
+        "wake_effort_forced": _each(models.wake_effort, q, 1),
+        "wake_effort_free": _each(models.wake_effort, q, 0),
+        "total_sleep_drive": _each(models.total_sleep_drive, h, _grid(0.0, 2.0)),
+        "nonphotic_drive_wake": _each(models.nonphotic_drive, xs, 1),
+        "nonphotic_drive_sleep": _each(models.nonphotic_drive, xs, 0),
+        "photoreceptor_2020_wake": _each(models.photoreceptor_conversion_rate, e, 1, "2020"),
+        "photoreceptor_2020_sleep": _each(models.photoreceptor_conversion_rate, e, 0, "2020"),
+        "photoreceptor_2018_wake": _each(models.photoreceptor_conversion_rate, lux, 1, "2018"),
+        "photic_drive": _each(models.photic_drive, xs, ys, p, alpha),
+        "firing_rate": _each(models.mean_population_firing_rate, v),
+        "state": _each(models.state, v),
+        "sigmoid": _each(models.sigmoid, e),
+        "alertness": _each(models.alertness_measure, _grid(0.0, 2.0), h, theta_l),
+        "circadian_drive": _each(models.circadian_drive, xs, ys),
+        "melatonin_suppression": _each(models.melatonin_suppression, e),
+        "circadian_phase": _each(models.circadian_phase, phase_x, ys),
+        "melatonin_synthesis": _each(models.melatonin_synthesis_regulation, phi),
+        "forced_wake_6_22": _each(models.forced_wake, t, 6, 22),
+        "forced_wake_8_20": _each(models.forced_wake, t, 8, 20),
         "urinary_excretion": np.array([models.urinary_excretion_rate(rho, t, ti) for ti in t]),
     }
 
