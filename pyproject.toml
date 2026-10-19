@@ -99,7 +99,7 @@ ignore = [
 ]
 
 [tool.ruff.lint.per-file-ignores]
-"tests/**" = ["ARG", "D", "S101"]  # toy models ignore arguments by design
+"tests/**" = ["ARG", "D", "S101", "S603", "S607"]  # toy models; tests run git and the hooks
 "notebooks/**" = ["T201"]  # notebooks print their results
 "scripts/**" = ["S603", "S607", "T201"]  # git with fixed arguments; CLI output
 
@@ -110,9 +110,9 @@ convention = "numpy"
 max-args = 8
 
 [tool.ty.environment]
-# The gate scripts import each other as top-level modules, as `python
-# scripts/<name>.py` runs them.
-extra-paths = ["scripts"]
+# The gate scripts and the hooks import each other as top-level modules, as
+# `python scripts/<name>.py` and Claude Code run them.
+extra-paths = ["scripts", ".claude/hooks"]
 
 [tool.ty.src]
 exclude = ["notebooks/archive/"]
@@ -120,8 +120,9 @@ exclude = ["notebooks/archive/"]
 [tool.pytest]
 minversion = "9.0"
 testpaths = ["tests", "src"]
-# The gate scripts are tested from `scripts/`; the package itself is installed.
-pythonpath = ["scripts"]
+# The gate scripts and the Claude Code hooks are tested from where they live;
+# the package itself is installed.
+pythonpath = ["scripts", ".claude/hooks"]
 addopts = [
     "-ra",
     "--strict-markers",
