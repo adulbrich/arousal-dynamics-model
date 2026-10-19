@@ -10,8 +10,9 @@ pre-commit:
     ruff-check:
       glob: "*.{py,pyi,ipynb}"
       run: uv run ruff check {staged_files}
+    # ruff also formats the Python code blocks in Markdown.
     ruff-format:
-      glob: "*.{py,pyi,ipynb}"
+      glob: "*.{py,pyi,ipynb,md}"
       run: uv run ruff format --check {staged_files}
     # No emdash, no emoji, in prose, comments and string literals alike.
     prose:
