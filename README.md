@@ -14,27 +14,33 @@ Parameters and equations are taken from the papers.
 
 Project led by Clotilde Pierson. Implementation by Alexander Ulbrich.
 
-## Setup 
+## Setup
 
-We recommend working in a conda environment using miniconda:
-
-```sh
-conda create --name arousal --file requirements.txt
-```
-
-Once the environment is setup, activate:
+The project is managed with [uv](https://docs.astral.sh/uv/). Install uv, then from the
+repository root:
 
 ```sh
-conda activate arousal
+uv sync
 ```
+
+This creates `.venv` with the Python version in `.python-version` and the locked
+dependencies. Run anything inside it with `uv run`, for example `uv run pytest`. For the
+notebooks:
+
+```sh
+uv sync --group notebooks
+uv run jupyter lab
+```
+
+Contributing, the git hooks and the CI gates are described in `CONTRIBUTING.md`.
 
 ## To Do
 
 - [ ] optimize for S_b and S_c constants for daytime
 - [ ] add debug flags where relevant
 - [ ] clean up old notebooks (won't run on current models.py)
-- [ ] add more unit tests, including comparison with original data if possible
+- [ ] add more unit tests, including comparison with original data if possible (golden tests pin current outputs)
 - [ ] have a notebook to run on scenarios and compare outputs (aMT6s, rho_b, KSS)
 - [ ] improve plots with better names for axes
 - [ ] re-organize `constants` in particular for the melatonin concentrations
-- [ ] add missing docstring and fix linting where approriate
+- [ ] add missing docstrings and fix linting in the legacy modules (ruff and ty run on new code)
