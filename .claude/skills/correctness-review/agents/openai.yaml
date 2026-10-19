@@ -1,3 +1,0 @@
-interface:
-  display_name: "Correctness Review"
-  short_description: "Sweep a diff for the defect classes of a numerical model"

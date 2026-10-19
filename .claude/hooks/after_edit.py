@@ -1,10 +1,11 @@
-"""PostToolUse on Edit and Write: ruff and the prose rule on the one file just written.
+"""PostToolUse on Edit, Write and NotebookEdit: ruff and the prose rule on the file just written.
 
 PostToolUse cannot block, but stderr on exit 2 is shown to the model, which is
 the point: the same finding lefthook would make at pre-commit, minutes earlier
 and one file at a time. Ruff runs from the project's `.venv` when it exists;
-`--force-exclude` keeps an excluded path from being linted. Nothing runs for a
-file outside this project and its worktrees (`hooklib.trusted_root`).
+`--force-exclude` keeps an excluded path from being linted. The file is found
+in its own checkout (`hooklib.edited_file`), and nothing runs for a file
+outside this project and its worktrees (`hooklib.trusted_root`).
 """
 
 from __future__ import annotations
@@ -25,11 +26,14 @@ def _run(args: list[str], root: str) -> subprocess.CompletedProcess[str]:
 def findings(root: str, path: str) -> list[str]:
     """Return what the gates would report on `path`, one block per tool; empty when clean.
 
-    Its scripts and `.venv` tools run, so an untrusted `root` gets nothing.
+    `path` is relative to `root`. Its scripts and `.venv` tools run, so an
+    untrusted `root` gets nothing.
     """
     if hooklib.trusted_root(root) is None:
         return []
-    if not path or path.startswith("../") or not (Path(root) / path).is_file():
+    if not path or Path(path).is_absolute() or path.startswith("../"):
+        return []
+    if not (Path(root) / path).is_file():
         return []
     out: list[str] = []
     prose = hooklib.load_script(root, "check_prose")
@@ -52,12 +56,10 @@ def findings(root: str, path: str) -> list[str]:
 
 def main() -> int:
     """Report what the commit gates would say about the edited file."""
-    payload = hooklib.read_input()
-    root = hooklib.trusted_root(payload.get("cwd") or ".")
-    if root is None:
+    edited = hooklib.edited_file(hooklib.read_input())
+    if edited is None:
         return 0
-    path = hooklib.repo_relative(root, (payload.get("tool_input") or {}).get("file_path") or "")
-    found = findings(root, path)
+    found = findings(edited.root, edited.path)
     for block in found:
         sys.stderr.write(block if block.endswith("\n") else f"{block}\n")
     return 2 if found else 0

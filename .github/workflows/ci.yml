@@ -63,6 +63,11 @@ jobs:
           python-version: ${{ matrix.python }}
           enable-cache: true
       - run: uv sync --locked
+      # The Claude Code hooks run on the system python3, which on macOS can be
+      # 3.9. tests/test_claude_hooks.py runs them end to end under HOOK_PYTHON.
+      - run: |
+          uv python install 3.9
+          echo "HOOK_PYTHON=$(uv python find --no-project 3.9)" >> "$GITHUB_ENV"
       - run: uv run pytest --cov
         env:
           HYPOTHESIS_PROFILE: ci
