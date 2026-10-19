@@ -76,12 +76,35 @@ def repo_relative(root: str, path: str) -> str:
     return os.path.relpath(path, root).replace("\\", "/")
 
 
-def load_script(root: str, name: str) -> ModuleType | None:
-    """Load a rule script from the session's checkout, so a worktree checks its own code.
+#: The checkout these hooks were installed from.
+PROJECT_ROOT = Path(__file__).resolve().parents[2]
 
-    None when the checkout has no such script: a session outside this
-    repository has nothing to enforce.
+
+def _common_dir(path: str) -> str:
+    common = git(path, "rev-parse", "--git-common-dir")
+    return str((Path(path) / common).resolve()) if common else ""
+
+
+def trusted_root(cwd: str) -> str | None:
+    """Return the checkout containing `cwd` if it is this project or one of its worktrees.
+
+    The hooks run the repository's own rule scripts and its `.venv` tools.
+    Taking them from any checkout the session has moved into would execute
+    code from a repository nobody vetted, so for any other checkout this is
+    None and the hooks apply only the rules that need no code from it. A
+    worktree shares the project's git common directory, so it checks against
+    the code it carries.
     """
+    root = repo_root(cwd)
+    project = _common_dir(str(PROJECT_ROOT))
+    return root if project and _common_dir(root) == project else None
+
+
+def load_script(cwd: str, name: str) -> ModuleType | None:
+    """Load a rule script from the session's checkout, if it is trusted and has one."""
+    root = trusted_root(cwd)
+    if root is None:
+        return None
     path = Path(root) / "scripts" / f"{name}.py"
     if not path.exists():
         return None

@@ -11,6 +11,7 @@ import after_edit
 import guard_edits
 import guard_gh
 import guard_git
+import hooklib
 import pytest
 import session_context
 
@@ -21,20 +22,26 @@ GOOD = "fix(model): use atan2 for the circadian phase"
 
 
 def _repo(path: Path, branch: str) -> Path:
-    """A git repository on `branch` carrying this repository's rule scripts."""
+    """A git repository on `branch` carrying this repository's rule scripts and hooks."""
     subprocess.run(["git", "init", "-q", "-b", branch, str(path)], check=True)
     shutil.copytree(ROOT / "scripts", path / "scripts")
+    shutil.copytree(HOOKS, path / ".claude" / "hooks")
     return path
 
 
 @pytest.fixture
-def feature(tmp_path: Path) -> Path:
-    return _repo(tmp_path / "feature", "feat/thing")
+def feature(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
+    """A trusted checkout: the hooks treat it as their own project."""
+    repo = _repo(tmp_path / "feature", "feat/thing")
+    monkeypatch.setattr(hooklib, "PROJECT_ROOT", repo)
+    return repo
 
 
 @pytest.fixture
-def on_main(tmp_path: Path) -> Path:
-    return _repo(tmp_path / "main", "main")
+def on_main(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
+    repo = _repo(tmp_path / "main", "main")
+    monkeypatch.setattr(hooklib, "PROJECT_ROOT", repo)
+    return repo
 
 
 class TestGuardGit:
@@ -124,6 +131,42 @@ class TestGuardGit:
         subprocess.run(["git", "init", "-q", "-b", "x", str(tmp_path)], check=True)
         assert guard_git.check("git commit -m 'Anything goes'", str(tmp_path)) is None
         assert guard_git.check("git add -A", str(tmp_path)) is not None
+
+
+class TestTrust:
+    """Rule scripts and tools are loaded only from this project and its worktrees."""
+
+    def test_a_planted_script_or_tool_never_runs(self, tmp_path: Path) -> None:
+        # A checkout that is not this project, with booby-trapped scripts and a
+        # fake ruff. PROJECT_ROOT is the real repository here, so it is untrusted.
+        repo = tmp_path / "elsewhere"
+        subprocess.run(["git", "init", "-q", "-b", "x", str(repo)], check=True)
+        marker = tmp_path / "ran"
+        trap = f"open({str(marker)!r}, 'w').close()\n"
+        (repo / "scripts").mkdir()
+        for name in ("check_prose.py", "check_commit_message.py"):
+            (repo / "scripts" / name).write_text(trap, encoding="utf-8")
+        (repo / ".venv" / "bin").mkdir(parents=True)
+        ruff = repo / ".venv" / "bin" / "ruff"
+        ruff.write_text(f"#!/bin/sh\ntouch {marker}\n", encoding="utf-8")
+        ruff.chmod(0o755)
+        (repo / "a.py").write_text("x = 1\n", encoding="utf-8")
+
+        assert hooklib.trusted_root(str(repo)) is None
+        guard_git.check(f"git commit -m '{GOOD}'", str(repo))
+        guard_gh.check("gh pr create --title 'Bad title' --body y", str(repo))
+        assert after_edit.findings(str(repo), "a.py") == []
+        assert not marker.exists()
+
+    def test_a_worktree_of_the_project_is_trusted(self, feature: Path, tmp_path: Path) -> None:
+        git = ["git", "-C", str(feature), "-c", "user.name=t", "-c", "user.email=t@example.com"]
+        subprocess.run([*git, "commit", "-q", "--allow-empty", "-m", "init"], check=True)
+        tree = tmp_path / "tree"
+        subprocess.run([*git, "worktree", "add", "-q", "-b", "other", str(tree)], check=True)
+        assert hooklib.trusted_root(str(tree)) == str(tree.resolve())
+
+    def test_the_real_project_is_trusted(self) -> None:
+        assert hooklib.trusted_root(str(ROOT / "tests")) == str(ROOT.resolve())
 
 
 class TestGuardGh:
@@ -231,7 +274,7 @@ class TestSessionContext:
     def test_counts_uncommitted_paths(self, feature: Path) -> None:
         lines = session_context.lines(str(feature))
         assert lines[0] == "Branch: feat/thing."
-        assert lines[1].startswith("Working tree: 1 uncommitted")  # the copied scripts/
+        assert lines[1].startswith("Working tree: 2 uncommitted")  # scripts/ and .claude/
 
     def test_uv_too_old(self, tmp_path: Path) -> None:
         if shutil.which("uv") is None:
@@ -245,8 +288,10 @@ class TestSessionContext:
 
 
 def _run_hook(name: str, payload: dict) -> subprocess.CompletedProcess[str]:
+    """Run the copy of hook `name` installed in the payload's checkout, as Claude Code would."""
+    hooks = Path(payload["cwd"]) / ".claude" / "hooks"
     return subprocess.run(
-        [sys.executable, str(HOOKS / name)],
+        [sys.executable, str(hooks / name)],
         input=json.dumps(payload),
         capture_output=True,
         text=True,

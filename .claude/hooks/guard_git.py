@@ -182,7 +182,7 @@ def check(command: str, cwd: str) -> str | None:
 
     if commits:
         message = extract_commit_message(command)
-        rules = hooklib.load_script(hooklib.repo_root(cwd), "check_commit_message")
+        rules = hooklib.load_script(cwd, "check_commit_message")
         if message is not None and rules is not None:
             problems = rules.check_commit_message(message)
             if problems:

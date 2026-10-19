@@ -51,9 +51,8 @@ def check(command: str, cwd: str) -> list[str]:
     """Every rule the published text breaks; empty to let the command run."""
     if not (PUBLISHES.search(command) or API_WITH_BODY.search(command)):
         return []
-    root = hooklib.repo_root(cwd)
-    prose = hooklib.load_script(root, "check_prose")
-    commit = hooklib.load_script(root, "check_commit_message")
+    prose = hooklib.load_script(cwd, "check_prose")
+    commit = hooklib.load_script(cwd, "check_commit_message")
     if prose is None or commit is None:
         return []
 
