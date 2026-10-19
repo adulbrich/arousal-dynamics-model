@@ -48,12 +48,28 @@ has run in the clone.
 - **Cite the source of every equation and constant** in its docstring or comment:
   paper, equation or table number. Where the code deliberately departs from a paper
   (a typo in the paper, a refit), say so at that line and why.
+- **Review loop on every PR, Dependabot's included.** GitHub requires no approving
+  review, and green CI is not one, so this is the review. Run
+  `mattpocock-skills:code-review` (conformance) and, on a PR that changes behaviour,
+  `correctness-review` (what breaks) beside it. Repeat until a pass raises nothing
+  you have not answered; answered means fixed, or declined in writing. Later passes
+  review the code earlier ones made you write. Verify a finding before acting:
+  reviewers are sometimes confidently wrong. Record each pass count and every
+  decline in the PR. Correctness is skipped, saying so in the PR, for a diff of only
+  docs, comments or templates, or a dependency bump with no source change. There is
+  no security pass. `docs/agents/code-review.md` has the local rules.
 - **A known discrepancy is a strict xfail.** Add a test that states what the paper
   requires, marked `xfail(strict=True)` with its issue number; the fix removes the marker.
 - **The papers can be wrong.** A discrepancy between code and paper is not
   automatically a code bug. Check the git history and the comments for a
   documented deviation before changing anything, and file a Model discrepancy
   issue when unsure.
+
+## Agent skills
+
+- Issue tracker: GitHub issues via `gh`. `docs/agents/issue-tracker.md`.
+- Code review: the standards sources and the golden-array rule.
+  `docs/agents/code-review.md`.
 
 ## Reference docs
 

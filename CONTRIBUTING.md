@@ -21,8 +21,8 @@ below into this clone. The notebook tooling is a separate group:
 branch             commit                 push               pull request          merge
 ------             ------                 ----               ------------          -----
 from origin/main   lefthook: ruff,        lefthook: ty,      CI: verify, test,     the owner
-fix/ feat/ ...     prose, branch, lock,   fast tests         lowest, pr-text       merges
-                   commit message
+fix/ feat/ ...     prose, branch, lock,   fast tests         lowest, pr-text;      merges
+                   commit message                            review loop
 ```
 
 1. **Branch from a fresh `origin/main`.** `git fetch origin main` first. Prefix
@@ -33,8 +33,14 @@ fix/ feat/ ...     prose, branch, lock,   fast tests         lowest, pr-text    
    `fix(model): use atan2 for the circadian phase`.
 3. **Push and open a pull request.** Every change reaches `main` through one; the
    owner merges. The template asks what changed, whether any number moved, what
-   ran locally, and which docs changed.
-4. **Clean up** the local branch after the merge.
+   ran locally, the review passes, and which docs changed.
+4. **Run the review loop.** `mattpocock-skills:code-review` and, on any pull request
+   that changes behaviour, `correctness-review` beside it, until a pass raises
+   nothing unanswered. Answered means fixed, or declined in one line in the PR.
+   Record the pass count for each. GitHub requires no approving review, so this
+   loop is the review the owner merges on. `docs/agents/code-review.md` has the
+   local rules; `AGENTS.md` says what exempts a PR from the correctness pass.
+5. **Clean up** the local branch after the merge.
 
 ## Golden outputs
 
@@ -85,22 +91,26 @@ removes the marker; strict mode fails the suite if the test passes while still m
 
 ## The gates
 
-One script per rule, run at the earliest point that can see the violation.
+One script per rule, run at the earliest point that can see the violation. The
+first column is what stops you locally, the middle one what stops an agent before
+the command runs, the last what stops the merge.
 
-| Rule | Local (lefthook) | CI |
-| --- | --- | --- |
-| Conventional subject; no emdash, emoji or session link in the message | `commit-msg` | `verify` walks the PR's commits; `pr-text` checks the title and body |
-| No emdash or emoji in tracked prose and code | `pre-commit`, staged files | `verify`: `check_prose.py --all` |
-| Ruff lint and format clean | `pre-commit`, staged files | `verify` |
-| `uv.lock` matches `pyproject.toml` | `pre-commit`, when either is staged | `verify`: `uv lock --check`, `uv sync --locked` |
-| Never commit on `main` | `pre-commit` branch check | a ruleset, once the owner adds one (below) |
-| ty clean | `pre-push` | `verify` |
-| Test suite green | `pre-push`, without `slow` | `test`: Ubuntu and macOS, Python 3.12 to 3.14, branch coverage at least 95 % |
-| The declared dependency floors work | | `lowest`: `--resolution lowest-direct` on 3.12 |
+| Rule | Local (lefthook) | Claude Code hook | CI |
+| --- | --- | --- | --- |
+| Conventional subject; no emdash, emoji or session link in the message | `commit-msg` | `guard_git.py` reads the `-m` text first | `verify` walks the PR's commits; `pr-text` checks the title and body |
+| No emdash or emoji in tracked prose and code | `pre-commit`, staged files | `after_edit.py` on the edited file | `verify`: `check_prose.py --all` |
+| No session link, emdash or emoji in PR or issue text | (never sees it) | `guard_gh.py` refuses the command | `pr-text`, for the PR title and body |
+| Ruff lint and format clean | `pre-commit`, staged files | `after_edit.py` | `verify` |
+| `uv.lock` matches `pyproject.toml` | `pre-commit`, when either is staged | `guard_edits.py` refuses a hand edit of `uv.lock` | `verify`: `uv lock --check`, `uv sync --locked` |
+| Stage by name; never commit on `main` | `pre-commit` branch check | `guard_git.py` refuses `add -A`, `commit -a`, a commit on `main` | a ruleset, once the owner adds one (below) |
+| No force push at `main`, `reset --hard`, `clean -f`, `branch -D`, `checkout .` | | `guard_git.py` | the ruleset (force push) |
+| Golden arrays, archived notebooks, `data/` and `CLAUDE.md` are not hand-edited | | `guard_edits.py` | review |
+| ty clean | `pre-push` | | `verify` |
+| Test suite green | `pre-push`, without `slow` | | `test`: Ubuntu and macOS, Python 3.12 to 3.14, branch coverage at least 95 % |
+| The declared dependency floors work | | | `lowest`: `--resolution lowest-direct` on 3.12 |
 
-Skipping locally: `LEFTHOOK=0 git commit` or `--no-verify`. CI runs the same
-commands, so skipping moves the failure to the pull request rather than removing
-it.
+Skipping locally: `LEFTHOOK=0 git commit` or `--no-verify`. The hooks and CI catch
+what was skipped, so skipping moves the failure rather than removing it.
 
 Dependabot opens a weekly grouped pull request for `uv.lock` and one for the
 SHA-pinned GitHub Actions. A dependency bump that moves a golden trajectory
@@ -126,3 +136,11 @@ the matrix can change without touching the ruleset.
 `CLAUDE.md` is a symlink to `AGENTS.md`, which Claude Code reads at the start of
 every session. The rules there are the ones the gates above enforce, plus the
 golden-output rule, which only review can enforce.
+
+`.claude/settings.json` enables the `mattpocock-skills` plugin and installs the
+hooks under `.claude/hooks/`, the middle column above. A fresh clone asks to trust
+the project settings once. The hooks are standard-library Python run by the
+`python3` on PATH, which on macOS may be the system 3.9; `tests/test_claude_hooks.py`
+keeps them to that. `SessionStart` prints the branch, uncommitted paths, and whether
+the uv on PATH is new enough. `.claude/skills/correctness-review/` is the
+correctness half of the review loop.

@@ -20,6 +20,17 @@ Closes #
 
 - `uv run ruff check`, `uv run ty check`, `uv run pytest`
 
+## Review loop
+
+<!-- AGENTS.md: mattpocock-skills:code-review, and correctness-review beside it
+     when the PR changes behaviour, until a pass raises nothing unanswered. State
+     each pass count, or why the correctness pass does not apply. A declined
+     finding gets one line. -->
+
+- Passes:
+- Correctness passes:
+- Declined:
+
 ## Docs
 
 <!-- README, CONTRIBUTING, AGENTS, an ADR, or "none, because ...". -->
