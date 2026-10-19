@@ -1,0 +1,54 @@
+name: Model discrepancy
+description: The code and a paper disagree about an equation, a constant, or a unit.
+labels: ["science"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        One discrepancy per issue. The papers contain errors too, so say which
+        side you think is wrong and why. A fix lands in its own pull request and
+        regenerates the golden arrays on purpose.
+  - type: input
+    id: paper
+    attributes:
+      label: Paper
+      description: Citation, with the equation or table number and the page.
+      placeholder: "Tekieh et al. 2020, Eq 9, p. 4"
+    validations:
+      required: true
+  - type: input
+    id: code
+    attributes:
+      label: Code
+      description: The function or constant, as a path and a name.
+      placeholder: "models.py, melatonin_suppression"
+    validations:
+      required: true
+  - type: textarea
+    id: paper-says
+    attributes:
+      label: What the paper says
+      description: The expression or value as printed, transcribed.
+    validations:
+      required: true
+  - type: textarea
+    id: code-does
+    attributes:
+      label: What the code does
+    validations:
+      required: true
+  - type: dropdown
+    id: verdict
+    attributes:
+      label: Which side is wrong
+      options:
+        - The code
+        - The paper (typo or internal inconsistency)
+        - Unclear
+    validations:
+      required: true
+  - type: textarea
+    id: evidence
+    attributes:
+      label: Evidence and impact
+      description: Units, another equation, a figure, a later paper, and which outputs move.

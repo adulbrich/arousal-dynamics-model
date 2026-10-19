@@ -1,0 +1,23 @@
+name: Enhancement
+description: A new capability, model, output, or tooling change.
+labels: ["enhancement"]
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem
+      description: What you are trying to do and what stops you today.
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposal
+      description: What should exist when this is done. For a new model, cite the paper.
+    validations:
+      required: true
+  - type: textarea
+    id: acceptance
+    attributes:
+      label: Done when
+      description: The checks that prove it, ideally as tests.
