@@ -62,6 +62,27 @@ The trajectory tolerance is 1e-5 of each variable's range: the worst drift
 measured between SciPy 1.13 and 1.18 was 3e-6, and any change to an equation or
 constant moves far more than that. `tests/test_golden.py` explains the numbers.
 
+## Tests
+
+`uv run pytest` runs everything; `uv run pytest -m "not slow"` is what the pre-push hook
+runs. CI adds branch coverage (at least 95 %) and the `ci` Hypothesis profile, which
+draws more examples with a fixed seed so a failure reproduces from the log.
+
+| File | What it pins |
+| --- | --- |
+| `test_golden.py` | Model output against the arrays the legacy code wrote. A refactor must leave it green. |
+| `test_equations.py` | Each equation against a value worked out by hand from the paper, and scalar and array calls agreeing exactly. |
+| `test_properties.py` | Hypothesis invariants: bounds, monotonicity, gating, periodicity, unit round trips. |
+| `test_invariants.py` | Physiology over simulated days: sleep at night, pressure building by day, entrainment. Ends with strict expected failures, one per audited code bug. |
+| `test_simulation.py`, `test_inputs.py` | The public API, its errors, and the `Model` interface through a toy model with a closed-form answer. |
+| `test_validation.py` | KSS against `data/output.csv`, the authors' reference; skipped when `data/` is absent. |
+| `test_notebooks.py` | `notebooks/*.ipynb` run, and are committed without outputs. |
+| `test_plotting.py`, `test_gate_scripts.py` | The plotting helpers and the scripts behind the gates. |
+
+A discrepancy with a paper that is not fixed yet is a test marked
+`xfail(strict=True)` with the audit ID in its reason. The pull request that fixes it
+removes the marker; strict mode fails the suite if the test passes while still marked.
+
 ## The gates
 
 One script per rule, run at the earliest point that can see the violation.
@@ -74,7 +95,7 @@ One script per rule, run at the earliest point that can see the violation.
 | `uv.lock` matches `pyproject.toml` | `pre-commit`, when either is staged | `verify`: `uv lock --check`, `uv sync --locked` |
 | Never commit on `main` | `pre-commit` branch check | a ruleset, once the owner adds one (below) |
 | ty clean | `pre-push` | `verify` |
-| Test suite green | `pre-push`, without `slow` | `test`: Ubuntu and macOS, Python 3.12 to 3.14 |
+| Test suite green | `pre-push`, without `slow` | `test`: Ubuntu and macOS, Python 3.12 to 3.14, branch coverage at least 95 % |
 | The declared dependency floors work | | `lowest`: `--resolution lowest-direct` on 3.12 |
 
 Skipping locally: `LEFTHOOK=0 git commit` or `--no-verify`. CI runs the same

@@ -7,6 +7,13 @@ aMT6s, Tekieh et al. 2020 for melanopic light input. Citations are in `README.md
 `CLAUDE.md` is a symlink to this file. Claude Code reads `CLAUDE.md`, so keep the
 symlink and never keep a second copy.
 
+## Layout
+
+`src/arousal_dynamics/`: the package. `models/arousal.py` holds the model, its
+parameters and its equations; `simulation.py` holds `simulate` and the `Model`
+interface. `tests/` mirrors it (CONTRIBUTING.md, "Tests"). `notebooks/archive/` is
+history and is excluded from every gate.
+
 ## Before you commit
 
 ```bash
@@ -41,6 +48,8 @@ has run in the clone.
 - **Cite the source of every equation and constant** in its docstring or comment:
   paper, equation or table number. Where the code deliberately departs from a paper
   (a typo in the paper, a refit), say so at that line and why.
+- **A known discrepancy is a strict xfail.** Add a test that states what the paper
+  requires, marked `xfail(strict=True)` with the audit ID; the fix removes the marker.
 - **The papers can be wrong.** A discrepancy between code and paper is not
   automatically a code bug. Check the git history and the comments for a
   documented deviation before changing anything, and file a Model discrepancy
