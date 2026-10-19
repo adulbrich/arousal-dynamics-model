@@ -1,0 +1,94 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  # The static gates, once. Each step is the command lefthook runs locally, so
+  # a red step here means a hook was skipped or never installed.
+  verify:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          # The commit-message step walks every commit the pull request adds,
+          # which needs the base branch reachable.
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: astral-sh/setup-uv@1c37ad07a6a961277cf70c0d37d6f313000f5884 # v10.3.0
+        with:
+          version: "0.13.2"
+          enable-cache: true
+      - run: uv lock --check
+      - run: uv sync --locked
+      - run: uv run ruff check --output-format=github
+      - run: uv run ruff format --check
+      - run: uv run python scripts/check_prose.py --all
+      # The same script lefthook runs at commit-msg, over the commits a
+      # `--no-verify` could have let through. Dependabot is skipped: its bodies
+      # embed upstream release notes. Keyed on who opened the PR, not
+      # `github.actor`, which changes when a maintainer pushes a fix-up.
+      - if: github.event_name == 'pull_request' && github.event.pull_request.user.login != 'dependabot[bot]'
+        env:
+          BASE_REF: ${{ github.base_ref }}
+        run: uv run python scripts/check_commit_message.py --range "origin/$BASE_REF..HEAD"
+      - run: uv run ty check
+
+  # The suite on every supported Python and on both platforms the model is
+  # run on. The golden trajectories come from an adaptive Fortran solver, so a
+  # platform difference is exactly what this matrix is here to surface.
+  test:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest]
+        python: ["3.12", "3.13", "3.14"]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: astral-sh/setup-uv@1c37ad07a6a961277cf70c0d37d6f313000f5884 # v10.3.0
+        with:
+          version: "0.13.2"
+          python-version: ${{ matrix.python }}
+          enable-cache: true
+      - run: uv sync --locked
+      - run: uv run pytest
+
+  # The oldest dependency versions pyproject.toml admits. A floor that is
+  # declared but never run is a guess.
+  lowest:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: astral-sh/setup-uv@1c37ad07a6a961277cf70c0d37d6f313000f5884 # v10.3.0
+        with:
+          version: "0.13.2"
+          python-version: "3.12"
+          enable-cache: true
+      - run: uv sync --resolution lowest-direct
+      - run: uv run --no-sync pytest
+
+  # The one check the `main` ruleset requires, so the matrix can change shape
+  # without editing the ruleset. A skipped required check counts as passing,
+  # so this job always runs and fails unless every job it needs succeeded.
+  ci:
+    if: always()
+    needs: [verify, test, lowest]
+    runs-on: ubuntu-latest
+    steps:
+      - if: contains(needs.*.result, 'failure') || contains(needs.*.result, 'cancelled') || contains(needs.*.result, 'skipped')
+        run: exit 1
+      - run: echo "verify, test and lowest passed"

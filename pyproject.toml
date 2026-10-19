@@ -1,0 +1,140 @@
+[project]
+name = "arousal-dynamics"
+version = "0.1.0"
+description = "Light-driven arousal dynamics model after Postnova et al. 2016 and 2018, Abeysuriya et al. 2018, and Tekieh et al. 2020."
+readme = "README.md"
+license = "Apache-2.0"
+license-files = ["LICENSE"]
+authors = [{ name = "Alexander Ulbrich" }]
+requires-python = ">=3.12"
+dependencies = [
+    "matplotlib>=3.10.8",
+    "numpy>=2.0",
+    "scipy>=1.13",
+]
+
+[dependency-groups]
+dev = [
+    "hypothesis>=6.170.2",
+    "lefthook==2.2.2",
+    "pytest>=9.1",
+    "pytest-cov>=7.1",
+    "pytest-regressions>=2.11",
+    "ruff==0.17.1",
+    "ty==0.0.89",
+]
+notebooks = [
+    "ipykernel>=7",
+    "jupyterlab>=4",
+    "pandas>=2.2",
+]
+
+[tool.uv]
+# The flat `models.py` and `constants.py` are not a package yet; the library
+# refactor turns this into a src-layout package with a build backend.
+package = false
+# The lockfile is written by this version and CI pins the same one in
+# `.github/workflows/`. Older uv cannot read every field it writes.
+required-version = ">=0.13.2"
+
+[tool.ruff]
+line-length = 100
+extend-exclude = [
+    # Legacy modules and notebooks. The library refactor replaces the modules
+    # and archives the notebooks; until then they are pinned by the golden
+    # tests, not by lint.
+    "constants.py",
+    "models.py",
+    "models.test.py",
+    "examples/",
+    "validation.ipynb",
+    # Research notes quote the legacy code verbatim in their code blocks.
+    "docs/research/",
+]
+
+[tool.ruff.lint]
+select = [
+    "A",    # builtins shadowing
+    "ARG",  # unused arguments
+    "B",    # bugbear
+    "C4",   # comprehensions
+    "D",    # docstrings, numpy convention below
+    "E",
+    "ERA",  # commented-out code
+    "F",
+    "FURB",
+    "I",    # import order
+    "N",    # naming
+    "NPY",  # numpy-specific
+    "PERF",
+    "PIE",
+    "PL",   # pylint subset
+    "PT",   # pytest style
+    "PTH",  # pathlib over os.path
+    "RET",
+    "RUF",
+    "S",    # bandit
+    "SIM",
+    "T20",  # print
+    "TID",
+    "UP",   # pyupgrade
+    "W",
+]
+ignore = [
+    # The model's variables are the papers' symbols (V_v, V_m, H, X, Y, Q_v,
+    # Theta_L). Renaming them to snake_case would break the one-to-one reading
+    # against the equations, which matters more here than PEP 8.
+    "N802",
+    "N803",
+    "N806",
+    "N815",
+    "N816",
+    # Equations are full of literal coefficients from the papers.
+    "PLR2004",
+]
+
+[tool.ruff.lint.per-file-ignores]
+"tests/**" = ["D", "S101"]
+"scripts/**" = ["S603", "S607", "T201"]  # git with fixed arguments; CLI output
+
+[tool.ruff.lint.pydocstyle]
+convention = "numpy"
+
+[tool.ruff.lint.pylint]
+max-args = 8
+
+[tool.ty.environment]
+# The gate scripts import each other as top-level modules, as `python
+# scripts/<name>.py` runs them.
+extra-paths = ["scripts"]
+
+[tool.ty.src]
+exclude = [
+    # Legacy modules, replaced by the library refactor.
+    "constants.py",
+    "models.py",
+    "models.test.py",
+    "examples/",
+    "validation.ipynb",
+]
+
+[tool.pytest]
+minversion = "9.0"
+testpaths = ["tests"]
+# The legacy modules live at the repository root (the library refactor drops
+# "." once the code is an installed package); the gate scripts are tested from
+# `scripts/`.
+pythonpath = [".", "scripts"]
+addopts = ["-ra", "--strict-markers", "--strict-config", "--import-mode=importlib"]
+xfail_strict = true
+filterwarnings = ["error"]
+markers = [
+    "slow: runs a multi-day simulation; skipped by the pre-push hook",
+]
+
+[tool.coverage.run]
+branch = true
+
+[tool.coverage.report]
+show_missing = true
+skip_covered = true

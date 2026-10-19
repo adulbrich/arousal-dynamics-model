@@ -1,0 +1,36 @@
+# A squash merge takes the pull request title as the `main` subject and the
+# body as its message, so both get the checks a commit gets at `commit-msg`:
+# Conventional subject, no emdash, no emoji, no claude.ai/code/session link.
+#
+# Its own workflow rather than a job in ci.yml because it has to re-run when
+# the title or body is edited, and `edited` on ci.yml would re-run the whole
+# test matrix for a typo fix in the description.
+name: pr-text
+
+on:
+  pull_request:
+    types: [opened, edited, synchronize, reopened]
+
+permissions:
+  contents: read
+
+jobs:
+  pr-text:
+    # Dependabot bodies embed upstream release notes; its subjects are exempt
+    # in the script. A skipped job satisfies a required check.
+    if: github.event.pull_request.user.login != 'dependabot[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      # The script needs only the standard library, so no sync.
+      - uses: astral-sh/setup-uv@1c37ad07a6a961277cf70c0d37d6f313000f5884 # v10.3.0
+        with:
+          version: "0.13.2"
+      # Title and body arrive through env, never interpolated into the script,
+      # so a body is data and cannot become shell.
+      - env:
+          PR_TITLE: ${{ github.event.pull_request.title }}
+          PR_BODY: ${{ github.event.pull_request.body }}
+        run: printf '%s\n\n%s\n' "$PR_TITLE" "$PR_BODY" | uv run --no-project python scripts/check_commit_message.py --stdin

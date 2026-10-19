@@ -1,0 +1,34 @@
+name: Bug
+description: Something in the code fails, crashes, or gives a result it should not.
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        For a disagreement between the code and a paper, use the Model
+        discrepancy form instead.
+  - type: textarea
+    id: what
+    attributes:
+      label: What happened
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: What you expected
+    validations:
+      required: true
+  - type: textarea
+    id: reproduce
+    attributes:
+      label: How to reproduce
+      description: The smallest code that shows it.
+      render: python
+    validations:
+      required: true
+  - type: input
+    id: versions
+    attributes:
+      label: Versions
+      description: Output of `uv run python -c "import numpy, scipy, sys; print(sys.version, numpy.__version__, scipy.__version__)"` and the commit.

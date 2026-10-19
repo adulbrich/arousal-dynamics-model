@@ -1,0 +1,44 @@
+# The local gates, one per rule, each the same command CI runs. `uv run
+# lefthook install` sets them up once per clone. Skip with LEFTHOOK=0 or
+# `git commit --no-verify`; CI catches what was skipped, so skipping moves the
+# failure to the pull request rather than removing it.
+pre-commit:
+  parallel: true
+  commands:
+    # Lint and format, narrowed to the staged files. Same checks as CI's
+    # `verify` job; `uv run ruff check --fix` and `uv run ruff format` fix most.
+    ruff-check:
+      glob: "*.{py,pyi,ipynb}"
+      run: uv run ruff check {staged_files}
+    ruff-format:
+      glob: "*.{py,pyi,ipynb}"
+      run: uv run ruff format --check {staged_files}
+    # No emdash, no emoji, in prose, comments and string literals alike.
+    prose:
+      glob: "*.{md,py,toml,yml,yaml,json,txt,cfg,ini,sh,ipynb}"
+      run: uv run python scripts/check_prose.py {staged_files}
+    # Every change reaches main through a pull request. This stops the commit
+    # that would need untangling first.
+    branch:
+      run: test "$(git branch --show-current)" != main
+      fail_text: "never commit on main; branch first (CONTRIBUTING.md)"
+    # The lockfile must match pyproject.toml, or CI's `uv sync --locked` fails.
+    lock:
+      glob: "{pyproject.toml,uv.lock}"
+      run: uv lock --check
+
+commit-msg:
+  commands:
+    # Conventional subject, lowercase imperative, no emdash, no emoji, and
+    # never a claude.ai/code/session link.
+    message:
+      run: uv run python scripts/check_commit_message.py {1}
+
+pre-push:
+  commands:
+    # The two checks a red pull request is usually red for, once per push
+    # rather than once per commit.
+    types:
+      run: uv run ty check
+    tests:
+      run: uv run pytest -q -m "not slow"
