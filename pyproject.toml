@@ -8,14 +8,28 @@ license-files = ["LICENSE"]
 authors = [{ name = "Alexander Ulbrich" }]
 requires-python = ">=3.12"
 dependencies = [
-    "matplotlib>=3.10.8",
     "numpy>=2.0",
     "scipy>=1.13",
 ]
 
+[project.optional-dependencies]
+plot = ["matplotlib>=3.10.8"]
+pandas = ["pandas>=2.2"]
+
+[project.urls]
+Repository = "https://github.com/adulbrich/arousal-dynamics-model"
+
+[build-system]
+requires = ["uv_build>=0.13.2,<0.14"]
+build-backend = "uv_build"
+
 [dependency-groups]
 dev = [
+    "arousal-dynamics[pandas,plot]",
     "hypothesis>=6.170.2",
+    "ipykernel>=7",
+    "nbclient>=0.10",
+    "nbformat>=5.10",
     "lefthook==2.2.2",
     "pytest>=9.1",
     "pytest-cov>=7.1",
@@ -24,30 +38,23 @@ dev = [
     "ty==0.0.89",
 ]
 notebooks = [
-    "ipykernel>=7",
     "jupyterlab>=4",
-    "pandas>=2.2",
 ]
 
 [tool.uv]
-# The flat `models.py` and `constants.py` are not a package yet; the library
-# refactor turns this into a src-layout package with a build backend.
-package = false
 # The lockfile is written by this version and CI pins the same one in
 # `.github/workflows/`. Older uv cannot read every field it writes.
 required-version = ">=0.13.2"
 
 [tool.ruff]
 line-length = 100
+# lefthook passes staged paths explicitly; without this, ruff would lint an
+# excluded file whenever it is staged, for example when archived notebooks move.
+force-exclude = true
 extend-exclude = [
-    # Legacy modules and notebooks. The library refactor replaces the modules
-    # and archives the notebooks; until then they are pinned by the golden
-    # tests, not by lint.
-    "constants.py",
-    "models.py",
-    "models.test.py",
-    "examples/",
-    "validation.ipynb",
+    # Notebooks from before the library, kept as history; they import the
+    # pre-library modules and no longer run.
+    "notebooks/archive/",
     # Research notes quote the legacy code verbatim in their code blocks.
     "docs/research/",
 ]
@@ -94,7 +101,8 @@ ignore = [
 ]
 
 [tool.ruff.lint.per-file-ignores]
-"tests/**" = ["D", "S101"]
+"tests/**" = ["ARG", "D", "S101"]  # toy models ignore arguments by design
+"notebooks/**" = ["T201"]  # notebooks print their results
 "scripts/**" = ["S603", "S607", "T201"]  # git with fixed arguments; CLI output
 
 [tool.ruff.lint.pydocstyle]
@@ -109,32 +117,33 @@ max-args = 8
 extra-paths = ["scripts"]
 
 [tool.ty.src]
-exclude = [
-    # Legacy modules, replaced by the library refactor.
-    "constants.py",
-    "models.py",
-    "models.test.py",
-    "examples/",
-    "validation.ipynb",
-]
+exclude = ["notebooks/archive/"]
 
 [tool.pytest]
 minversion = "9.0"
-testpaths = ["tests"]
-# The legacy modules live at the repository root (the library refactor drops
-# "." once the code is an installed package); the gate scripts are tested from
-# `scripts/`.
-pythonpath = [".", "scripts"]
-addopts = ["-ra", "--strict-markers", "--strict-config", "--import-mode=importlib"]
+testpaths = ["tests", "src"]
+# The gate scripts are tested from `scripts/`; the package itself is installed.
+pythonpath = ["scripts"]
+addopts = [
+    "-ra",
+    "--strict-markers",
+    "--strict-config",
+    "--import-mode=importlib",
+    "--doctest-modules",
+]
 xfail_strict = true
 filterwarnings = ["error"]
 markers = [
-    "slow: runs a multi-day simulation; skipped by the pre-push hook",
+    "slow: takes more than a few seconds; skipped by the pre-push hook",
+    "validation: compares against reference data in data/, skipped when it is absent",
 ]
 
 [tool.coverage.run]
 branch = true
+source = ["arousal_dynamics"]
 
 [tool.coverage.report]
 show_missing = true
 skip_covered = true
+fail_under = 95
+exclude_also = ["if TYPE_CHECKING:", "\\.\\.\\.$"]

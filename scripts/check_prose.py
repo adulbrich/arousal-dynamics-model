@@ -54,8 +54,8 @@ TEXT_SUFFIXES = frozenset(
 
 # Paths the rule does not reach: notebooks from before the rule, kept as
 # history, and machine output.
-EXCLUDED_PREFIXES = ("examples/", "notebooks/archive/")
-EXCLUDED_FILES = frozenset({"uv.lock", "validation.ipynb"})
+EXCLUDED_PREFIXES = ("notebooks/archive/",)
+EXCLUDED_FILES = frozenset({"uv.lock"})
 
 # The one line the harness appends to every pull request body. Stripped before
 # checking so that the footer is not what fails the PR.
