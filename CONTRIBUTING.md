@@ -34,12 +34,8 @@ fix/ feat/ ...     prose, branch, lock,   fast tests         lowest, pr-text;   
 3. **Push and open a pull request.** Every change reaches `main` through one; the
    owner merges. The template asks what changed, whether any number moved, what
    ran locally, the review passes, and which docs changed.
-4. **Run the review loop.** `mattpocock-skills:code-review` and, on any pull request
-   that changes behaviour, `correctness-review` beside it, until a pass raises
-   nothing unanswered. Answered means fixed, or declined in one line in the PR.
-   Record the pass count for each. GitHub requires no approving review, so this
-   loop is the review the owner merges on. `docs/agents/code-review.md` has the
-   local rules; `AGENTS.md` says what exempts a PR from the correctness pass.
+4. **Run the review loop** that `AGENTS.md` describes. GitHub requires no approving
+   review, so this loop is the review the owner merges on.
 5. **Clean up** the local branch after the merge.
 
 ## Golden outputs

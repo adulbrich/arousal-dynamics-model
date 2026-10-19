@@ -1,10 +1,9 @@
 # Code review
 
-`mattpocock-skills:code-review` runs on every pull request, as `AGENTS.md` says. It
-checks conformance. `correctness-review` under `.claude/skills/` runs beside it on
-every pull request that changes behaviour and checks whether the change is wrong.
-There is no security pass: the package has no server, no credentials and no
-untrusted input. Two local deltas from the skill's default brief:
+`AGENTS.md` holds the review rule: `mattpocock-skills:code-review` for conformance,
+`correctness-review` under `.claude/skills/` for whether a change is wrong, and no
+security pass, since the package has no server, no credentials and no untrusted
+input. Two local deltas from the code-review skill's default brief:
 
 - **The Standards axis reads these sources and no others:** `AGENTS.md`, the
   "Golden outputs" and "Tests" sections of `CONTRIBUTING.md`, and the ADRs under

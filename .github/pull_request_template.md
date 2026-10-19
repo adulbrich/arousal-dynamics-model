@@ -22,10 +22,8 @@ Closes #
 
 ## Review loop
 
-<!-- AGENTS.md: mattpocock-skills:code-review, and correctness-review beside it
-     when the PR changes behaviour, until a pass raises nothing unanswered. State
-     each pass count, or why the correctness pass does not apply. A declined
-     finding gets one line. -->
+<!-- The review loop in AGENTS.md: each pass count, or why the correctness pass
+     does not apply, and one line per declined finding. -->
 
 - Passes:
 - Correctness passes:

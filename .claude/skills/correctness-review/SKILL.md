@@ -67,6 +67,11 @@ sub-agent prompt: the sub-agent has no other access to it.
   is fine when the code says so at that line and why. Find it: for each value or
   form the diff adds or changes, check the cited equation in the paper; one that
   cannot be checked from here is reported as unverified, with the citation.
+- **Status read and dropped.** A solver, tool or check reports failure and nothing
+  acts on it: `odeint`'s `full_output` info discarded (it warns and returns what it
+  reached rather than raising), a warning filtered and not re-raised, a subprocess
+  exit code unchecked. Find it: make the call fail (an ODE that diverges, a missing
+  file, a non-zero exit) from a scratch script and say what the caller returns.
 - **Never-executed code.** A branch, parameter combination or error path no run
   reaches: `photic_version="2018"` in a full simulation, an interpolation kind, a
   `raise`. Find it: say what input makes the line run for the first time, and
@@ -88,7 +93,7 @@ from the checkout." Every prompt carries the diff command, the commit list, the 
 checklist from step 3, and a 400-word limit on the report.
 
 - **Numbers.** Entries: unit at a boundary, silent dtype or shape change, solver
-  sensitivity, and comment claims. Brief: "For each entry, walk every hunk it
+  sensitivity, status read and dropped, and comment claims. Brief: "For each entry, walk every hunk it
   applies to. Report each finding under the entry's name with the input that
   triggers it and the output you got."
 - **Boundaries.** Entries: threshold and window edges, boundary conditions. Brief:
