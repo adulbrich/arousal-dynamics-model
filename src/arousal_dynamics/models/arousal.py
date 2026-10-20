@@ -42,12 +42,12 @@ class ArousalParameters:
     """
 
     # Time constants
-    tau_v: float = _p(50.0, "s", "P18 Table 2")
-    tau_m: float = _p(50.0, "s", "P18 Table 2, equal to tau_v")
-    tau_h: float = _p(59.0 * 3600.0, "s", "P18 Table 2")
-    tau_x: float = _p((24.0 * 3600.0) / (2.0 * np.pi), "s", "P18 Table 2")
-    tau_y: float = _p((24.0 * 3600.0) / (2.0 * np.pi), "s", "P18 Table 2, equal to tau_x")
-    tau_c: float = _p(24.2 * 3600.0, "s", "P18 Table 2")
+    tau_v: float = _p(50.0, "s", "P18 Table 1")
+    tau_m: float = _p(50.0, "s", "P18 Table 1, equal to tau_v")
+    tau_h: float = _p(59.0 * 3600.0, "s", "P18 Table 1")
+    tau_x: float = _p((24.0 * 3600.0) / (2.0 * np.pi), "s", "P18 Table 1")
+    tau_y: float = _p((24.0 * 3600.0) / (2.0 * np.pi), "s", "P18 Table 1, equal to tau_x")
+    tau_c: float = _p(24.2 * 3600.0, "s", "P18 Table 1")
     tau_l: float = _p(24.0 * 60.0, "s", "T20 p. 7")
     tau_alpha: float = _p(
         3.11 * 3600,
@@ -56,40 +56,40 @@ class ArousalParameters:
     )
 
     # Coupling strengths
-    nu_vm: float = _p(-2.1, "mV s", "P18 Table 2")
-    nu_mv: float = _p(-1.8, "mV s", "P18 Table 2")
-    nu_hm: float = _p(4.57, "nM s", "P18 Table 2")
-    nu_xp: float = _p(37.0 * 60.0, "s", "P18 Table 2")
-    nu_xn: float = _p(0.032, "1", "P18 Table 2")
-    nu_yy: float = _p((1.0 / 3.0) * 37.0 * 60.0, "s", "P18 Table 2, nu_xp / 3")
-    nu_yx: float = _p(0.55 * 37.0 * 60.0, "s", "P18 Table 2, 0.55 nu_xp")
-    nu_vh: float = _p(1.0, "mV/nM", "P18 Table 2")
-    nu_vc: float = _p(-0.5, "mV", "P18 Table 2")
+    nu_vm: float = _p(-2.1, "mV s", "P18 Table 1")
+    nu_mv: float = _p(-1.8, "mV s", "P18 Table 1")
+    nu_hm: float = _p(4.57, "nM s", "P18 Table 1")
+    nu_xp: float = _p(37.0 * 60.0, "s", "P18 Table 1")
+    nu_xn: float = _p(0.032, "1", "P18 Table 1")
+    nu_yy: float = _p((1.0 / 3.0) * 37.0 * 60.0, "s", "P18 Table 1, nu_xp / 3")
+    nu_yx: float = _p(0.55 * 37.0 * 60.0, "s", "P18 Table 1, 0.55 nu_xp")
+    nu_vh: float = _p(1.0, "mV/nM", "P18 Table 1")
+    nu_vc: float = _p(-0.5, "mV", "P18 Table 1")
     nu_la: float = _p(-0.11, "1", "T20 Eq 13")
 
     # Circadian oscillator
-    gamma: float = _p(0.13, "1", "P18 Table 2")
-    delta: float = _p(24.0 * 3600.0 / 0.99729, "s", "P18 Table 2")
-    beta: float = _p(0.007 / 60.0, "1/s", "P18 Table 2")
+    gamma: float = _p(0.13, "1", "P18 Table 1")
+    delta: float = _p(24.0 * 3600.0 / 0.99729, "s", "P18 Table 1")
+    beta: float = _p(0.007 / 60.0, "1/s", "P18 Table 1")
 
     # External drives
-    d_m: float = _p(1.3, "mV", "P18 Table 2")
-    a_v: float = _p(-10.3, "mV", "P18 Table 2")
+    d_m: float = _p(1.3, "mV", "P18 Table 1")
+    a_v: float = _p(-10.3, "mV", "P18 Table 1")
 
     # Wake effort
-    v_we: float = _p(-0.07, "mV", "P18 Table 2. P16 states +0.07 (issue #13)")
-    v_th: float = _p(-2.0, "mV", "P18 Table 2")
+    v_we: float = _p(-0.07, "mV", "P18 Table 1. P16 states +0.07 (issue #13)")
+    v_th: float = _p(-2.0, "mV", "P18 Table 1")
 
     # Firing rate
-    q_max: float = _p(100.0, "1/s", "P18 Table 2")
-    theta: float = _p(10.0, "mV", "P18 Table 2")
-    sigma_prime: float = _p(3.0, "mV", "P18 Table 2")
+    q_max: float = _p(100.0, "1/s", "P18 Table 1")
+    theta: float = _p(10.0, "mV", "P18 Table 1")
+    sigma_prime: float = _p(3.0, "mV", "P18 Table 1")
 
     # Photic drive
-    epsilon: float = _p(0.4, "1", "P18 Table 2")
-    i_0: float = _p(100, "lx", "P18 Table 2")
-    i_1: float = _p(9500, "lx", "P18 Table 2")
-    alpha_0: float = _p(0.1 / 60.0, "1/s", "P18 Table 2")
+    epsilon: float = _p(0.4, "1", "P18 Table 1")
+    i_0: float = _p(100, "lx", "P18 Table 1")
+    i_1: float = _p(9500, "lx", "P18 Table 1")
+    alpha_0: float = _p(0.1 / 60.0, "1/s", "P18 Table 1")
     f_4100k: float = _p(8.19e-4, "W/m^2/lx", "T20 Eq 7")
     photic_version: Literal["2018", "2020"] = field(
         default="2020",
@@ -100,7 +100,7 @@ class ArousalParameters:
     )
 
     # Non-photic drive
-    r: float = _p(10.0, "1", "P18 Table 2")
+    r: float = _p(10.0, "1", "P18 Table 1")
 
     # Alertness sigmoid
     s_b: float = _p(0.05, "W/m^2", "T20 p. 7")
