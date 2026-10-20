@@ -67,6 +67,27 @@ VALUE_FLAGS = frozenset(
     | {"--input", "-X", "--method", "-q", "--jq", "--header", "--target", "--repo", "-R"}
 )
 KNOWN_FLAGS = VALUE_FLAGS | frozenset(TEXT_FLAGS) | frozenset(API_FIELD_FLAGS)
+# Flags whose value shapes the output and is never sent anywhere.
+LOCAL_VALUE_FLAGS = frozenset({"-q", "--jq", "--template", "--header"})
+
+
+def sent_words(group: str, args: list[Word]) -> str:
+    """Return every word of a command except the values of flags that stay local.
+
+    Comments are already gone (`hooklib.words`). This is the session-link
+    backstop's text, in case a flag swallowed a published value.
+    """
+    local = LOCAL_VALUE_FLAGS | ({"-t", "-H"} if group == "api" else set())
+    kept: list[str] = []
+    skip = False
+    for word in args:
+        if skip:
+            skip = False
+        elif word.value in local:
+            skip = True
+        elif not any(word.value.startswith(f"{flag}=") for flag in local):
+            kept.append(word.value)
+    return "\n".join(kept)
 
 
 def flag_values(args: list[Word], names: tuple[str, ...]) -> list[str]:
@@ -155,8 +176,9 @@ def problems(command: str, cwd: str) -> list[str]:
         group, verb, args = call
         text = published_text(group, args, step)
         # The session link is the rule that matters most, so it is also looked
-        # for in the whole command, in case a flag was misread as a value.
-        if hooklib.SESSION_LINK in f"{text}\n{step.segment.text}":
+        # for in every word the command sends, in case a flag was misread as
+        # a value.
+        if hooklib.SESSION_LINK in f"{text}\n{sent_words(group, args)}":
             found.append(f"contains a {hooklib.SESSION_LINK} link; never publish one (AGENTS.md)")
         prose = hooklib.load_script(step.cwd, "check_prose")
         commit = hooklib.load_script(step.cwd, "check_commit_message")

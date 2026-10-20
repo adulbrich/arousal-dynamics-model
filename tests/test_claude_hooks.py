@@ -341,6 +341,9 @@ class TestGuardGh:
             f"gh pr create --title '{GOOD}' --body x  # {EMDASH} note",
             "gh api -X GET search/issues -f q='claude.ai/code/session repo:o/r'",
             f"gh pr create --title '{GOOD}' --body '-thing to do'",
+            "gh api -X PATCH repos/o/r/issues/comments/1 -f body=ok "
+            "--jq '.body | contains(\"claude.ai/code/session\")'",
+            "gh pr comment 5 --body ok # drop the claude.ai/code/session link first",
         ],
     )
     def test_allowed(self, feature: Path, command: str) -> None:
