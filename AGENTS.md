@@ -58,6 +58,8 @@ has run in the clone.
 ## Reference docs
 
 - `CONTRIBUTING.md`: setup, the process, the golden-output rule, the gates.
-- `docs/adr/`: the decisions. Research and audits live in GitHub issues, not in the
-  repository: the equation audit against the papers is issue #7, the model landscape #15.
+- `docs/adr/`: the decisions. Research, audits and open work live in GitHub issues, not
+  in the repository or a To Do list: the equation audit against the papers is issue #7,
+  the model landscape #15, the evidence for a daytime model #16. The pull request that
+  finishes an item closes its issue.
 - `README.md`: what the model is, the papers, how to run it.

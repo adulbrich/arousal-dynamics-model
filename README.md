@@ -91,7 +91,6 @@ lands in its own pull request.
 [audit]: https://github.com/adulbrich/arousal-dynamics-model/issues/7
 [i8]: https://github.com/adulbrich/arousal-dynamics-model/issues/8
 [i9]: https://github.com/adulbrich/arousal-dynamics-model/issues/9
-[i11]: https://github.com/adulbrich/arousal-dynamics-model/issues/11
 
 Two numerical facts worth knowing before comparing against data. From its default initial
 state the model takes about two weeks to entrain to a regular schedule, so start a
@@ -113,10 +112,11 @@ uv run pytest
 For the notebooks, `uv sync --group notebooks` and `uv run jupyter lab`;
 `notebooks/archive/` holds the analyses from before the package, which no longer run.
 
-## To Do
+## Open work
 
-- [ ] fix the audited discrepancies with the papers ([issue #7][audit]), one pull request each
-- [ ] find out why Tekieh 2020 Fig 6 is wider than its Eq 14 ([issue #11][i11])
-- [ ] an entrainment helper that starts a run from a steady state
-- [ ] an event-aware solver for the sleep/wake and forced-wake switches
-- [ ] a notebook to run scenarios and compare outputs (aMT6s, rho_b, KSS)
+Open work is tracked in the [issues][issues], not in this README: the audited discrepancies
+with the papers ([issue #7][audit]), the model landscape and a future daytime model, and
+engineering work such as an entrainment helper and an event-aware solver. The pull request
+that finishes an item closes its issue.
+
+[issues]: https://github.com/adulbrich/arousal-dynamics-model/issues
