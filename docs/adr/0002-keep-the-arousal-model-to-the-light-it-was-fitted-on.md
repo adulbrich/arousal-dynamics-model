@@ -14,11 +14,11 @@ the `Model` interface (ADR 0001).
   14) was taken directly from a dose-response curve pooled from eight laboratory and
   field studies, four of them in the daytime and only two of those measured against dim
   light (Hommes and Giménez 2015, Table 1 and Discussion, via T20 p. 7). As coded (S_c =
-  1/223.5 W/m², audit D3) it saturates above about 60 lux melanopic EDI; T20 reports its
-  own default saturating at 0.86 W/m², about 650 lux melanopic EDI (T20 Section 3.3.4,
-  audit E3). A refit moves where the effect saturates, not how large it can get, and a
-  logistic in linear irradiance cannot be graded across the decades between office light
-  and daylight.
+  1/223.5 W/m², the value the authors gave by email in 2021, issue #10) it saturates
+  above about 60 lux melanopic EDI; T20 reports its own default saturating at 0.86 W/m²,
+  about 650 lux melanopic EDI (T20 Section 3.3.4, issue #11). A refit moves where the
+  effect saturates, not how large it can get, and a logistic in linear irradiance cannot
+  be graded across the decades between office light and daylight.
 - **Raise ν_la.** The light term's effect on KSS is capped at |ν_la|·H, about 1.4
   points. ν_la was fitted to seven data sets, five in the evening or at night and two in
   the daytime comparing bright light with dim light (T20 Table 3); raising it for daytime
@@ -38,8 +38,9 @@ the `Model` interface (ADR 0001).
   calibrated before T20 and checked against phase response curves that include bright
   pulses at every circadian phase (T20 Section 2.3.1 and Table 1), all against a dim
   background.
-- Audit E3, whether the code reproduces T20's own alerting dose-response, stays open as
-  a reproduction question inside this model's scope, and waits with D1 and D2.
+- Issue #11, why T20's own alerting dose-response (Fig 6) is wider than its Eq 14 at the
+  S_c the authors gave, stays open as a reproduction question inside this model's scope,
+  with the other findings of the equation audit (issue #7).
 - The daytime evidence points to structure this model lacks: an alerting response that
   may keep growing across decades of light (about 0.5 KSS point per decade of melanopic
   EDI in everyday life, Didikoglu et al. 2023, doi:10.1073/pnas.2301608120, open data
