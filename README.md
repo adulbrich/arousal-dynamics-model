@@ -81,8 +81,8 @@ left out on purpose.
 
 ## Scope
 
-The model was fitted to evening and night-time laboratory light and does not tell an
-office day from an outdoor day;
+The model was fitted mostly to evening and night-time light and does not tell an office
+day from an outdoor day;
 `docs/adr/0002-keep-the-arousal-model-to-the-light-it-was-fitted-on.md` records why it
 stays that way for now.
 
