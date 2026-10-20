@@ -370,6 +370,10 @@ class TestGuardGh:
             ("gh pr merge 12 -m --subject 'Bad subject' --body x", "squash-merge subject"),
             (f"gh pr create -f --body 'a {EMDASH} b'", "emdash"),
             (
+                "BODY='see claude.ai/code/session_1' gh issue create --title t --body \"$BODY\"",
+                "session",
+            ),
+            (
                 f"gh pr create --title '{GOOD}' --body-file - <<'EOF'\n"
                 "see claude.ai/code/session_1\nEOF",
                 "session",
