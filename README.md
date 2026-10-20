@@ -81,11 +81,10 @@ left out on purpose.
 
 ## Scope
 
-The model's light responses were fitted to laboratory exposures against a dim
-background, mostly in the evening and at night. Its alerting term is saturated above
-about 60 lux melanopic EDI, so it does not tell an office day from an outdoor day.
-`docs/adr/0002-keep-the-arousal-model-to-the-light-it-was-fitted-on.md` records why the
-model stays that way and leaves daytime light to a separate model.
+The model was fitted to evening and night-time laboratory light and does not tell an
+office day from an outdoor day;
+`docs/adr/0002-keep-the-arousal-model-to-the-light-it-was-fitted-on.md` records why it
+stays that way for now.
 
 ## Known discrepancies with the papers
 
