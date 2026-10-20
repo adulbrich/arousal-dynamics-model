@@ -77,7 +77,7 @@ def expand(raw: str) -> Path:
     """Return `raw` with `~` expanded, or as written when that fails (`~nouser`)."""
     try:
         return Path(raw).expanduser()
-    except (RuntimeError, KeyError):
+    except (RuntimeError, KeyError, ValueError):
         return Path(raw)
 
 
@@ -185,16 +185,30 @@ def load_script(cwd: str, name: str) -> ModuleType | None:
 
 
 class EditedFile(NamedTuple):
-    """An edited file relative to its checkout, spelled two ways.
+    """An edited file relative to its checkout, spelled three ways.
 
     `path` resolves the parent directories but not the file itself, so
     `CLAUDE.md` stays `CLAUDE.md` rather than becoming its target. `written`
-    resolves nothing, so a symlinked `data/` still reads as `data/`.
+    resolves nothing, so a symlinked `data/` still reads as `data/`. `target`
+    resolves everything, so a `notes.md` linked to `uv.lock` reads as `uv.lock`.
     """
 
     root: str
     path: str
     written: str
+    target: str
+
+    @property
+    def spellings(self) -> tuple[str, str, str]:
+        """Return the three spellings, for a rule that must match any of them."""
+        return (self.path, self.written, self.target)
+
+
+def _exists(path: Path) -> bool:
+    try:
+        return path.exists()
+    except (OSError, ValueError):  # permission denied, name too long, NUL byte
+        return False
 
 
 def _relative(path: str, root: str) -> str:
@@ -220,7 +234,7 @@ def edited_file(payload: dict[str, Any]) -> EditedFile | None:
     lexical = Path(os.path.normpath(resolve_dir(session_cwd(payload), raw)))
     resolved = str(Path(real(str(lexical.parent))) / lexical.name)
     anchor = lexical.parent
-    while not anchor.exists() and anchor != anchor.parent:
+    while not _exists(anchor) and anchor != anchor.parent:
         anchor = anchor.parent
     roots = [real(repo_root(str(anchor))), real(repo_root(session_cwd(payload)))]
     # The checkout the file was named in comes first, then the one it lives in.
@@ -229,7 +243,12 @@ def edited_file(payload: dict[str, Any]) -> EditedFile | None:
             break
     else:
         root = next((r for r in roots if not _relative(resolved, r).startswith("..")), roots[0])
-    return EditedFile(root, _relative(resolved, root), _relative(str(lexical), root))
+    return EditedFile(
+        root,
+        _relative(resolved, root),
+        _relative(str(lexical), root),
+        _relative(real(str(lexical)), root),
+    )
 
 
 # Shell commands
@@ -302,6 +321,20 @@ class _Scanner:
                 j += 1
         return len(self.text)
 
+    def arithmetic_end(self, i: int) -> int:
+        """Return the index after the `))` closing arithmetic, where `<<` is a shift."""
+        depth = 0
+        j = i
+        while j < len(self.text):
+            if self.text[j] == "(":
+                depth += 1
+            elif self.text[j] == ")":
+                if depth == 0:
+                    return min(j + 2, len(self.text)) if self.text.startswith("))", j) else j + 1
+                depth -= 1
+            j += 1
+        return len(self.text)
+
     def operator(self, i: int) -> int:
         """Record the heredoc whose `<<` is at `i`; return where its line continues."""
         j = i + 2
@@ -366,7 +399,11 @@ class _Scanner:
                 end = len(self.text) if end < 0 else end
                 self.blank(i, end, " ")  # a comment holds no words at all
                 i = end
-            elif self.text.startswith("<<", i) and not self.text.startswith("<<<", i):
+            elif self.text.startswith("<<<", i):
+                i += 3  # a here-string, not a heredoc
+            elif self.text.startswith(("$((", "(("), i):
+                i = self.arithmetic_end(i + (3 if c == "$" else 2))
+            elif self.text.startswith("<<", i):
                 i = self.operator(i)
             elif c == "\n" and self.pending:
                 i = self.bodies(i)
@@ -405,16 +442,7 @@ SEPARATOR = re.compile(r"&&|\|\||\|&|[;|\n()]|(?<![<>&])&(?![&>])")
 
 def segments(command: str) -> list[Segment]:
     """Split a shell line into simple commands at operators, parentheses and newlines."""
-    scanned = scan(command)
-    out: list[Segment] = []
-    start = 0
-    for match in [*SEPARATOR.finditer(scanned.masked), None]:
-        end = match.start() if match else len(command)
-        if command[start:end].strip():
-            body = next((h.body for h in scanned.heredocs if start <= h.operator < end), None)
-            out.append(Segment(command[start:end], scanned.masked[start:end], start, body))
-        start = match.end() if match else end
-    return out
+    return [step.segment for step in steps(command, ".")]
 
 
 _ANSI = {"n": "\n", "t": "\t", "\\": "\\", "'": "'", '"': '"'}
@@ -473,8 +501,13 @@ class Word(NamedTuple):
 # Words that start a command line without being the command, and wrappers
 # whose own options come before the command they run.
 _KEYWORDS = frozenset({"!", "{", "then", "do", "else", "elif", "if", "while", "until", "time"})
-_WRAPPERS = frozenset({"sudo", "env", "command", "exec", "nohup"})
-_WRAPPER_WITH_ARG = frozenset({"-u", "-g", "-C", "-S", "--unset", "--chdir"})
+_WRAPPERS = frozenset({"sudo", "env", "command", "exec", "nohup", "nice", "timeout", "xargs"})
+_WRAPPER_WITH_ARG = frozenset(
+    {"-u", "-g", "-C", "-S", "--unset", "--chdir", "-n", "-I", "-L", "-P", "-d", "-E", "-s"}
+    | {"-a", "-k", "--signal", "--kill-after"}
+)
+# Wrappers whose first plain argument is theirs, not the command's.
+_WRAPPER_FIRST_ARG = frozenset({"timeout"})
 ASSIGNMENT = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*=")
 
 
@@ -493,6 +526,8 @@ def words(segment: Segment) -> list[Word]:
             i += 1
             while i < len(found) and found[i].masked.startswith("-"):
                 i += 2 if found[i].masked in _WRAPPER_WITH_ARG else 1
+            if word in _WRAPPER_FIRST_ARG:
+                i += 1  # timeout's duration
         else:
             break
     return found[i:]
@@ -528,9 +563,26 @@ class Step(NamedTuple):
 
 
 def steps(command: str, cwd: str) -> Iterator[Step]:
-    """Walk a shell line's simple commands, following `cd` from one to the next."""
+    """Walk a shell line's simple commands, following `cd` from one to the next.
+
+    A `cd` inside `( ... )` stays inside: the directory goes back to what it
+    was when the subshell closes.
+    """
+    scanned = scan(command)
     here = cwd
-    for segment in segments(command):
-        segment_words = words(segment)
-        here = change_directory(here, segment_words)
-        yield Step(segment, segment_words, here)
+    outer: list[str] = []
+    start = 0
+    for match in [*SEPARATOR.finditer(scanned.masked), None]:
+        end = match.start() if match else len(command)
+        if command[start:end].strip():
+            body = next((h.body for h in scanned.heredocs if start <= h.operator < end), None)
+            segment = Segment(command[start:end], scanned.masked[start:end], start, body)
+            segment_words = words(segment)
+            here = change_directory(here, segment_words)
+            yield Step(segment, segment_words, here)
+        separator = match.group(0) if match else ""
+        if separator == "(":
+            outer.append(here)
+        elif separator == ")" and outer:
+            here = outer.pop()
+        start = match.end() if match else end

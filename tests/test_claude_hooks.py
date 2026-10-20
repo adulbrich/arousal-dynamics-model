@@ -118,6 +118,14 @@ class TestGuardGit:
             "cd ~nouser-xyz && git status",
             "git -C ~nouser-xyz status",
             "git status\x00",
+            "cat <<< 'some text'\ngit status",
+            "echo $((1<<2))\ngit log -1",
+            "(( x <<= 1 ))\ngit status",
+            "git add -n .",
+            "git add -A --dry-run",
+            "git clean -fdn",
+            "git commit -m 'fix: rename `foo` to bar'",
+            "git merge --ff-only origin/main",
         ],
     )
     def test_allowed(self, feature: Path, command: str) -> None:
@@ -173,6 +181,12 @@ class TestGuardGit:
             ("if true; then git add -A; fi", "Stage files by name"),
             ("! git add -A", "Stage files by name"),
             ("env -i git add -A", "Stage files by name"),
+            ("cat <<< 'x'\ngit reset --hard", "reset --hard"),
+            ("echo $((1<<2))\ngit clean -fd", "clean -f"),
+            ("(( x <<= 1 ))\ngit checkout .", "checkout ."),
+            ("git branch --merged | grep -v main | xargs git branch -D", "branch -D"),
+            ("timeout 60 git push -f origin main", "force push at main"),
+            ("git commit -m 'fix: x' --trailer 'Session: claude.ai/code/session_1'", "session"),
         ],
     )
     def test_refused(self, feature: Path, command: str, rule: str) -> None:
@@ -214,6 +228,36 @@ class TestGuardGit:
     def test_a_branch_made_elsewhere_does_not_count(self, feature: Path, on_main: Path) -> None:
         command = f"git checkout -b z && cd {on_main} && git commit -m '{GOOD}'"
         assert guard_git.refusal(command, str(feature)) == guard_git.MAIN_COMMIT
+
+    @pytest.mark.parametrize(
+        "command",
+        [
+            "git merge --no-ff feat/x",
+            "git cherry-pick abc123",
+            "git revert --no-edit HEAD",
+            "git am p",
+        ],
+    )
+    def test_other_commands_that_record_a_commit(self, on_main: Path, command: str) -> None:
+        assert guard_git.refusal(command, str(on_main)) == guard_git.MAIN_COMMIT
+
+    @pytest.mark.parametrize(
+        "command",
+        ["git merge --abort", "git cherry-pick --no-commit abc", "git revert -n HEAD"],
+    )
+    def test_their_no_commit_forms_are_fine(self, on_main: Path, command: str) -> None:
+        assert guard_git.refusal(command, str(on_main)) is None
+
+    def test_a_new_branch_covers_the_whole_checkout(self, on_main: Path) -> None:
+        (on_main / "docs").mkdir()
+        command = f"git switch --create=fix/x && cd docs && git commit -m '{GOOD}' README.md"
+        assert guard_git.refusal(command, str(on_main)) is None
+
+    def test_a_subshell_cd_does_not_leak(self, feature: Path, on_main: Path) -> None:
+        command = f"(cd {on_main} && git fetch); git commit -m '{GOOD}'"
+        assert guard_git.refusal(command, str(feature)) is None
+        command = f"(cd {feature} && true); git commit -m '{GOOD}'"
+        assert guard_git.refusal(command, str(on_main)) == guard_git.MAIN_COMMIT
 
     def test_a_dry_run_commit_on_main_is_fine(self, on_main: Path) -> None:
         assert guard_git.refusal(f"git commit --dry-run -m '{GOOD}'", str(on_main)) is None
@@ -259,6 +303,10 @@ class TestGuardGh:
             "echo \"gh pr create --title 'Bad title'\"",
             "cat > t.py <<'EOF'\ngh pr create --title 'Bad title' --body x\nEOF",
             f"gh pr create --title '{GOOD}' --body x && echo 'a {EMDASH} b'",
+            f"gh pr create --title '{GOOD}' --body x --label 'bug {ROBOT}'",
+            f"gh pr create --title '{GOOD}' --body x  # {EMDASH} note",
+            "gh api -X GET search/issues -f q='claude.ai/code/session repo:o/r'",
+            f"gh pr create --title '{GOOD}' --body '-thing to do'",
         ],
     )
     def test_allowed(self, feature: Path, command: str) -> None:
@@ -363,7 +411,9 @@ class TestGuardEdits:
 class TestEditedFile:
     def test_a_relative_path_is_resolved_against_the_session(self, feature: Path) -> None:
         payload = {"cwd": str(feature / "scripts"), "tool_input": {"file_path": "../uv.lock"}}
-        assert hooklib.edited_file(payload) == (str(feature), "uv.lock", "uv.lock")
+        edited = hooklib.edited_file(payload)
+        assert edited is not None
+        assert (edited.root, edited.path, edited.written) == (str(feature), "uv.lock", "uv.lock")
 
     def test_a_symlinked_spelling_names_the_same_file(self, feature: Path, tmp_path: Path) -> None:
         link = tmp_path / "link"
@@ -411,6 +461,24 @@ class TestEditedFile:
         edited = hooklib.edited_file(payload)
         assert edited is not None
         assert edited.written == "data/x.csv"
+
+    def test_a_link_to_a_protected_file_is_named_by_its_target(self, feature: Path) -> None:
+        (feature / "uv.lock").write_text("lock\n")
+        (feature / "notes.md").symlink_to("uv.lock")
+        payload = {"cwd": str(feature), "tool_input": {"file_path": str(feature / "notes.md")}}
+        edited = hooklib.edited_file(payload)
+        assert edited is not None
+        assert "uv.lock" in edited.spellings
+
+    @pytest.mark.parametrize("kind", ["unreadable", "overlong"])
+    def test_an_unreadable_or_overlong_path_does_not_crash(self, feature: Path, kind: str) -> None:
+        raw = (
+            "/private/var/root/x/uv.lock"
+            if kind == "unreadable"
+            else str(feature / ("a" * 300) / "x")
+        )
+        payload = {"cwd": str(feature), "tool_input": {"file_path": raw}}
+        assert hooklib.edited_file(payload) is not None
 
     def test_an_unexpandable_home_does_not_crash(self, feature: Path) -> None:
         payload = {"cwd": str(feature), "tool_input": {"file_path": "~nouser-xyz/y"}}

@@ -89,7 +89,9 @@ def _dry_run(args: list[Word]) -> bool:
 
 
 def add_rule(call: GitCall) -> str | None:
-    """Refuse `git add` of everything."""
+    """Refuse `git add` of everything, unless it is a dry run."""
+    if _dry_run(call.args):
+        return None
     sweeping = any(
         a.value == "--all" or a.value in WIPE_PATHSPECS or _short_flag(a.value, "A")
         for a in call.args
@@ -181,7 +183,11 @@ def reset_rule(call: GitCall) -> str | None:
 
 def clean_rule(call: GitCall) -> str | None:
     """Refuse `git clean -f` unless it is a dry run."""
-    if _has_flag(call.args, "--force", "f") and not _dry_run(call.args):
+    # In clean, only -e takes a value, so an n before any e in a cluster is -n.
+    dry = _dry_run(call.args) or any(
+        _short_flag(a.value, "n") and "e" not in a.value.split("n", 1)[0] for a in call.args
+    )
+    if _has_flag(call.args, "--force", "f") and not dry:
         return "No `git clean -f` from an agent. Ask the user to run it."
     return None
 
@@ -225,17 +231,42 @@ RULES: dict[str, Callable[[GitCall], str | None]] = {
 
 
 def _switches_to_new_branch(call: GitCall) -> bool:
-    flags = {a.value for a in call.args}
+    flags = {a.value.split("=", 1)[0] for a in call.args}
     return (call.sub == "checkout" and bool(flags & {"-b", "-B"})) or (
         call.sub == "switch" and bool(flags & {"-c", "-C", "--create", "--force-create"})
     )
 
 
+# Subcommands that record a commit on the current branch, and the options
+# under which they do not.
+RECORDS_COMMIT = {
+    "commit": frozenset({"--dry-run"}),
+    "merge": frozenset({"--ff-only", "--abort", "--quit"}),
+    "cherry-pick": frozenset({"-n", "--no-commit", "--abort", "--quit", "--skip"}),
+    "revert": frozenset({"-n", "--no-commit", "--abort", "--quit", "--skip"}),
+    "am": frozenset({"--abort", "--quit", "--skip", "--show-current-patch"}),
+}
+
+
+def _records_commit(call: GitCall) -> bool:
+    exempt = RECORDS_COMMIT.get(call.sub)
+    return exempt is not None and not any(a.value in exempt for a in call.args)
+
+
 class Taken(NamedTuple):
-    """A message value an option gives (None for none), and the index of its last word."""
+    """A message value an option gives (None for none), and the index of its last word.
+
+    `literal` marks a value written in single quotes, where `$(` and backticks
+    are plain text.
+    """
 
     value: str | None
     last: int
+    literal: bool = False
+
+
+def _single_quoted(word: Word) -> bool:
+    return len(word.text) >= 2 and word.text[0] == word.text[-1] == "'"
 
 
 class _UnreadableError(Exception):
@@ -249,7 +280,7 @@ def _long_option(args: list[Word], i: int, heredoc: str | None) -> Taken | None:
     if word.startswith("--message="):
         return Taken(word[len("--message=") :], i)
     if word == "--message" and following is not None:
-        return Taken(following, i + 1)
+        return Taken(following, i + 1, _single_quoted(args[i + 1]))
     if word in {"-F", "--file"} or word.startswith("--file="):
         inline = word.split("=", 1)[1] if "=" in word else None
         source = inline if inline is not None else following
@@ -273,14 +304,19 @@ def _short_cluster(args: list[Word], i: int) -> Taken:
             if letter in {"F", "C", "c"}:
                 raise _UnreadableError  # a file, or a message reused from a commit
             return Taken(None, i + 1 if takes_next else i)
-        return Taken(args[i + 1].value, i + 1) if takes_next else Taken(rest, i)
+        if takes_next:
+            return Taken(args[i + 1].value, i + 1, _single_quoted(args[i + 1]))
+        return Taken(rest, i)
     return Taken(None, i)
 
 
-def _message_part(value: str, heredoc: str | None) -> str | None:
+def _message_part(taken: Taken, heredoc: str | None) -> str | None:
     """Return a message value as git records it, or None when it is a substitution not read."""
-    if CAT_SUBSTITUTION.match(value):
-        return heredoc
+    value = taken.value or ""
+    if taken.literal:
+        return value
+    if CAT_SUBSTITUTION.match(value) and value.rstrip().endswith(")"):
+        return heredoc  # the harness's -m "$(cat <<'EOF' ... EOF\n)", nothing after it
     return None if "$(" in value or "`" in value else value
 
 
@@ -298,7 +334,7 @@ def commit_message(segment: Segment, call: GitCall) -> str | None:
         while i < len(call.args):
             taken = _long_option(call.args, i, segment.heredoc) or _short_cluster(call.args, i)
             if taken.value is not None:
-                part = _message_part(taken.value, segment.heredoc)
+                part = _message_part(taken, segment.heredoc)
                 if part is None:
                     return None
                 parts.append(part)
@@ -319,10 +355,17 @@ def refusal(command: str, cwd: str) -> str | None:
         reason = rule(call) if rule else None
         if reason:
             return reason
-        here = hooklib.real(call.directory)
+        checkout = hooklib.real(hooklib.repo_root(call.directory))
+        on_main = hooklib.current_branch(call.directory) == "main"
+        if _records_commit(call) and checkout not in branched and on_main:
+            return MAIN_COMMIT
         if call.sub == "commit" and not _has_flag(call.args, "--dry-run"):
-            if here not in branched and hooklib.current_branch(call.directory) == "main":
-                return MAIN_COMMIT
+            published = f"{step.segment.text}\n{step.segment.heredoc or ''}"
+            if hooklib.SESSION_LINK in published:
+                return (
+                    f"This commit carries a {hooklib.SESSION_LINK} link, in its message or a "
+                    "trailer. Never publish one (AGENTS.md)."
+                )
             message = commit_message(step.segment, call)
             rules = hooklib.load_script(call.directory, "check_commit_message")
             if message is not None and rules is not None:
@@ -331,7 +374,7 @@ def refusal(command: str, cwd: str) -> str | None:
                     listed = "\n".join(f"- {p}" for p in problems)
                     return f"Commit message fails the rule (AGENTS.md):\n{listed}"
         if _switches_to_new_branch(call):
-            branched.add(here)
+            branched.add(checkout)
     return None
 
 

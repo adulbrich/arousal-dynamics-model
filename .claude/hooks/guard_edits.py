@@ -2,8 +2,9 @@
 
 Answers with the JSON deny shape rather than exit 2, so the reason reaches the
 model verbatim and the turn continues. The edited path is found in the file's
-own checkout and checked both as written and with its directories resolved
-(`hooklib.edited_file`), without case, since macOS file systems ignore it.
+own checkout and checked as written, with its directories resolved, and fully
+resolved (`hooklib.edited_file`), without case, since macOS file systems
+ignore it.
 Only this project and its worktrees are protected.
 """
 
@@ -42,9 +43,9 @@ def main() -> int:
     edited = hooklib.edited_file(payload)
     if edited is None or hooklib.trusted_root(edited.root) is None:
         return 0
-    # Both spellings: `path` keeps CLAUDE.md as itself, `written` keeps a
-    # symlinked data/ as data/.
-    for path in (edited.path, edited.written):
+    # Every spelling: CLAUDE.md as itself, a symlinked data/ as data/, and a
+    # link to uv.lock as uv.lock.
+    for path in edited.spellings:
         reason = reason_for(path)
         if reason:
             decision = {

@@ -50,31 +50,57 @@ TEXT_FILE_FLAGS = {
     "release": ("-F", "--notes-file"),
     "api": ("--input",),
 }
-API_WRITE_FLAGS = ("-f", "-F", "--field", "--raw-field", "--input")
+API_FIELD_FLAGS = ("-f", "-F", "--field", "--raw-field")
+API_WRITE_FLAGS = (*API_FIELD_FLAGS, "--input")
+# Flags whose value is published text, for pr, issue and release.
+TEXT_FLAGS = ("-t", "--title", "-b", "--body", "--subject", "-c", "--comment", "-n", "--notes")
 REPO_FLAGS = frozenset({"-R", "--repo"})
+# gh flags that take a value, so the word after one is a value, never a flag.
+VALUE_FLAGS = frozenset(
+    {"-t", "--title", "-b", "--body", "-F", "--body-file", "--subject", "-c", "--comment"}
+    | {"-n", "--notes", "--notes-file", "-l", "--label", "-a", "--assignee", "-r", "--reviewer"}
+    | {"-B", "--base", "-H", "--head", "-m", "--milestone", "-p", "--project", "-T"}
+    | {"--template", "-f", "--field", "--raw-field", "--input", "-X", "--method", "-q"}
+    | {"--jq", "--header", "--target", "--repo", "-R"}
+)
 
 
 def flag_values(args: list[Word], names: tuple[str, ...]) -> list[str]:
-    """Return the values given to any of `names`: `--flag v`, `--flag=v`, `-f v` or `-fv`."""
+    """Return the values given to any of `names`: `--flag v`, `--flag=v`, `-f v` or `-fv`.
+
+    A word that is the value of the flag before it is never read as a flag.
+    """
     out: list[str] = []
-    for i, word in enumerate(args):
-        value = word.value
-        for name in names:
-            if value == name and i + 1 < len(args):
-                out.append(args[i + 1].value)
-            elif name.startswith("--") and value.startswith(f"{name}="):
-                out.append(value[len(name) + 1 :])
-            elif not name.startswith("--") and value.startswith(name) and len(value) > len(name):
-                out.append(value[len(name) :])
+    i = 0
+    while i < len(args):
+        value = args[i].value
+        if value in names and i + 1 < len(args):
+            out.append(args[i + 1].value)
+        else:
+            for name in names:
+                if name.startswith("--") and value.startswith(f"{name}="):
+                    out.append(value[len(name) + 1 :])
+                elif (
+                    not name.startswith("--")
+                    and not value.startswith("--")
+                    and value.startswith(name)
+                    and len(value) > len(name)
+                ):
+                    out.append(value[len(name) :])
+        i += 2 if value in VALUE_FLAGS else 1
     return out
 
 
 def published_text(group: str, args: list[Word], step: Step) -> str:
-    """Return the text a publishing command reads from files or a heredoc."""
-    sources = flag_values(args, TEXT_FILE_FLAGS.get(group, ()))
+    """Return the text a publishing command sends: flag values, files, and a heredoc."""
     if group == "api":
-        sources += [v.split("=@", 1)[1] for v in flag_values(args, ("-F", "--field")) if "=@" in v]
-    texts = []
+        fields = flag_values(args, API_FIELD_FLAGS)
+        texts = [v.split("=", 1)[-1] for v in fields if "=@" not in v]
+        sources = [v.split("=@", 1)[1] for v in fields if "=@" in v]
+    else:
+        texts = flag_values(args, TEXT_FLAGS)
+        sources = []
+    sources += flag_values(args, TEXT_FILE_FLAGS.get(group, ()))
     for raw in sources:
         if raw == "-":
             texts.append(step.segment.heredoc or "")
@@ -107,6 +133,8 @@ def _command(step: Step) -> tuple[str, str, list[Word]] | None:
 
 def _publishes(group: str, verb: str, args: list[Word]) -> bool:
     if group == "api":
+        if any(m.upper() == "GET" for m in flag_values(args, ("-X", "--method"))):
+            return False
         return any(a.value.startswith(API_WRITE_FLAGS) for a in args)
     return (group, verb) in PUBLISHING
 
@@ -119,7 +147,7 @@ def problems(command: str, cwd: str) -> list[str]:
         if call is None or not _publishes(*call):
             continue
         group, verb, args = call
-        text = f"{step.segment.text}\n{published_text(group, args, step)}"
+        text = published_text(group, args, step)
         if hooklib.SESSION_LINK in text:
             found.append(f"contains a {hooklib.SESSION_LINK} link; never publish one (AGENTS.md)")
         prose = hooklib.load_script(step.cwd, "check_prose")
