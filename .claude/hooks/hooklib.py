@@ -544,32 +544,32 @@ def words(segment: Segment) -> list[Word]:
         for m in re.finditer(r"\S+", segment.masked)
     ]
     i = 0
+    wrapper_at: int | None = None
     while i < len(found):
         word = found[i].masked
         if word in _KEYWORDS or ASSIGNMENT.match(word):
             i += 1
         elif word in _WRAPPERS:
+            wrapper_at = i if wrapper_at is None else wrapper_at
             i += 1
             while i < len(found) and found[i].masked.startswith("-"):
                 option = found[i].masked
-                following = found[i + 1].value if i + 1 < len(found) else ""
-                # An option known to take a value takes the next word. One not
-                # known either way is assumed to, unless the next word is an
-                # option or a command these hooks watch: failing closed.
-                watched = following.rsplit("/", 1)[-1] in {"git", "gh"}
-                takes = option in _WRAPPERS[word] or (
-                    "=" not in option and not following.startswith("-") and not watched
-                )
+                takes = option in _WRAPPERS[word]
                 i += 2 if takes else 1
-            if (
-                word in _WRAPPER_FIRST_ARG
-                and i < len(found)
-                and found[i].value.rsplit("/", 1)[-1] not in {"git", "gh"}
-            ):
-                i += 1  # timeout's duration, unless an option above already took it
+            if word in _WRAPPER_FIRST_ARG and i < len(found):
+                i += 1  # timeout's duration
         else:
             break
+    if wrapper_at is not None and not (i < len(found) and _watched(found[i])):
+        # Failing closed: a wrapper option this hook misread could have
+        # shifted the command, so a watched command after the first wrapper
+        # is the command.
+        i = next((k for k in range(wrapper_at + 1, len(found)) if _watched(found[k])), i)
     return found[i:]
+
+
+def _watched(word: Word) -> bool:
+    return word.value.rsplit("/", 1)[-1] in {"git", "gh"}
 
 
 def is_command(word: Word, name: str) -> bool:

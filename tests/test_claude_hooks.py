@@ -191,6 +191,8 @@ class TestGuardGit:
             ("sudo --user alex git add -A", "Stage files by name"),
             ("sudo --unknown-option value git add -A", "Stage files by name"),
             ("timeout --foreground 60 git push -f origin main", "force push at main"),
+            ("sudo -E timeout 60 git add -A", "Stage files by name"),
+            ("sudo --weird env FOO=1 git add -A", "Stage files by name"),
             ("echo $(( $(git reset --hard) ))", "reset --hard"),
             ('echo "$((1 << 3))"\ngit add -A', "Stage files by name"),
             ("cat <<< 'x'\ngit reset --hard", "reset --hard"),
