@@ -506,10 +506,11 @@ def unquote(text: str) -> str:
 
 
 class Word(NamedTuple):
-    """A word of a simple command: as masked (for structure) and as written."""
+    """A word of a simple command: as masked (for structure), as written, and its offset."""
 
     masked: str
     text: str
+    start: int = 0
 
     @property
     def value(self) -> str:
@@ -547,7 +548,7 @@ ASSIGNMENT = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*=")
 def words(segment: Segment) -> list[Word]:
     """Return the simple command's words, from the command name on."""
     found = [
-        Word(m.group(0), segment.text[m.start() : m.end()])
+        Word(m.group(0), segment.text[m.start() : m.end()], m.start())
         for m in re.finditer(r"\S+", segment.masked)
     ]
     i = 0

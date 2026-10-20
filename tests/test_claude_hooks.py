@@ -374,6 +374,10 @@ class TestGuardGh:
                 "session",
             ),
             (
+                "BODY='gh: claude.ai/code/session_1' gh issue create --title t --body \"$BODY\"",
+                "session",
+            ),
+            (
                 f"gh pr create --title '{GOOD}' --body-file - <<'EOF'\n"
                 "see claude.ai/code/session_1\nEOF",
                 "session",

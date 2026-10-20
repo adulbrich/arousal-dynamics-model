@@ -178,7 +178,7 @@ def problems(command: str, cwd: str) -> list[str]:
         # The session link is the rule that matters most, so it is also looked
         # for in every word the command sends, in case a flag was misread as
         # a value, and in whatever precedes `gh` (`BODY=... gh ... "$BODY"`).
-        prefix = step.segment.text[: step.segment.text.find(step.words[0].text)]
+        prefix = step.segment.text[: step.words[0].start]
         if hooklib.SESSION_LINK in f"{text}\n{sent_words(group, args)}\n{prefix}":
             found.append(f"contains a {hooklib.SESSION_LINK} link; never publish one (AGENTS.md)")
         prose = hooklib.load_script(step.cwd, "check_prose")
