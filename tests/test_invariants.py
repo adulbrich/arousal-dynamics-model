@@ -1,7 +1,7 @@
 """Physiology a correct run must show, checked on five simulated days.
 
 The last tests are strict expected failures: each encodes what the papers
-require where the code disagrees (`docs/research/2026-10-19-equation-audit.md`).
+require where the code disagrees (the equation audit, issue #7).
 They fail today, and the pull request that fixes the discrepancy turns them
 into ordinary tests; strict mode makes an unexpected pass fail the suite.
 """
@@ -35,7 +35,7 @@ def test_bounded_states_stay_in_range(office_week: Trajectory) -> None:
     theta_l = office_week["Theta_L"]
     assert np.all((theta_l >= p.nu_la - SOLVER_ATOL) & (theta_l <= SOLVER_ATOL))
     assert np.all(office_week["A"] >= -SOLVER_ATOL)
-    # With audit D1, synthesis is rarely on and plasma melatonin decays to
+    # With issue #8, synthesis is rarely on and plasma melatonin decays to
     # about 1e-24 between bursts, so this checks sign, not presence.
     assert np.all(office_week["rho_b"] >= -SOLVER_ATOL)
 
@@ -100,7 +100,7 @@ def test_light_lowers_sleepiness(office_week: Trajectory) -> None:
 
 @pytest.mark.xfail(
     strict=True,
-    reason="audit D1: two-quadrant arctan gives two short synthesis windows a day",
+    reason="issue #8: two-quadrant arctan gives two short synthesis windows a day",
 )
 def test_melatonin_is_synthesized_for_one_long_window_each_night(office_week: Trajectory) -> None:
     p = ArousalParameters()
@@ -109,6 +109,6 @@ def test_melatonin_is_synthesized_for_one_long_window_each_night(office_week: Tr
     assert 6.0 <= hours_per_day <= 10.0
 
 
-@pytest.mark.xfail(strict=True, reason="audit D2: logistic form gives r = 0.509 in darkness")
+@pytest.mark.xfail(strict=True, reason="issue #9: logistic form gives r = 0.509 in darkness")
 def test_darkness_does_not_suppress_melatonin() -> None:
     assert eq.melatonin_suppression(0.0, ArousalParameters()) == pytest.approx(1.0)

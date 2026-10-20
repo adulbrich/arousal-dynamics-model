@@ -49,7 +49,7 @@ has run in the clone.
   paper, equation or table number. Where the code deliberately departs from a paper
   (a typo in the paper, a refit), say so at that line and why.
 - **A known discrepancy is a strict xfail.** Add a test that states what the paper
-  requires, marked `xfail(strict=True)` with the audit ID; the fix removes the marker.
+  requires, marked `xfail(strict=True)` with its issue number; the fix removes the marker.
 - **The papers can be wrong.** A discrepancy between code and paper is not
   automatically a code bug. Check the git history and the comments for a
   documented deviation before changing anything, and file a Model discrepancy
@@ -58,5 +58,6 @@ has run in the clone.
 ## Reference docs
 
 - `CONTRIBUTING.md`: setup, the process, the golden-output rule, the gates.
-- `docs/research/`: the model landscape and the equation audit against the papers.
+- `docs/adr/`: the decisions. Research and audits live in GitHub issues, not in the
+  repository; the equation audit against the papers is issue #7.
 - `README.md`: what the model is, the papers, how to run it.

@@ -108,7 +108,7 @@ def test_wake_effort_is_nonnegative_and_only_when_forced(Q_v: float, forced: int
 
 @given(oscillator, oscillator)
 def test_circadian_phase_stays_in_the_two_quadrant_range(X: float, Y: float) -> None:
-    # Documents the current `arctan(Y / X)`; audit D1 says the papers need
+    # Documents the current `arctan(Y / X)`; issue #8 says the papers need
     # the full circle, and the fix replaces this test.
     assume(abs(X) > 1e-6)
     phi = eq.circadian_phase(X, Y)

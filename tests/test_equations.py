@@ -133,7 +133,7 @@ class TestMelatonin:
         assert eq.melatonin_synthesis(3.0, P) == 1
 
     def test_suppression_is_half_at_r_b(self) -> None:
-        # The code's logistic form is 0.5 at E = R_b (audit D2 for the form).
+        # The code's logistic form is 0.5 at E = R_b (issue #9 for the form).
         assert eq.melatonin_suppression(0.031, P) == pytest.approx(0.5)
 
     def test_excretion_of_a_steady_level(self) -> None:

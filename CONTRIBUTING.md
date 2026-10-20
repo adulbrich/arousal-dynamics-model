@@ -42,7 +42,7 @@ fix/ feat/ ...     prose, branch, lock,   fast tests         lowest, pr-text    
 input grid, and four three-day trajectories with all states and derived outputs
 (KSS, circadian drive, phase, aMT6s). The arrays in `tests/test_golden/` were
 written by the code as it stood at commit 55eeb3e, known discrepancies with the
-papers included (`docs/research/`).
+papers included ([issue #7](https://github.com/adulbrich/arousal-dynamics-model/issues/7)).
 
 Two kinds of pull request touch the model, and they never mix:
 
@@ -80,7 +80,7 @@ draws more examples with a fixed seed so a failure reproduces from the log.
 | `test_plotting.py`, `test_gate_scripts.py` | The plotting helpers and the scripts behind the gates. |
 
 A discrepancy with a paper that is not fixed yet is a test marked
-`xfail(strict=True)` with the audit ID in its reason. The pull request that fixes it
+`xfail(strict=True)` with its issue number in its reason. The pull request that fixes it
 removes the marker; strict mode fails the suite if the test passes while still marked.
 
 ## The gates

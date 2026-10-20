@@ -7,9 +7,9 @@ Tekieh et al. 2020 ([T20]). Citations are in the README.
 
 Every equation is a function of state values and an `ArousalParameters`, works
 on scalars and arrays alike, and names its source. Known discrepancies with the
-papers are listed in `docs/research/2026-10-19-equation-audit.md` (IDs D1, D2,
-U1 below); this module reproduces the original code exactly, and each fix lands
-on its own so its effect on the golden outputs is visible.
+papers are GitHub issues, indexed in issue #7 and cited below by number; this
+module reproduces the original code exactly, and each fix lands on its own so
+its effect on the golden outputs is visible.
 """
 
 from dataclasses import dataclass, field
@@ -52,7 +52,7 @@ class ArousalParameters:
     tau_alpha: float = _p(
         3.11 * 3600,
         "s",
-        "A18 Table 1. T20 uses 1.5 h with its Hill-form suppression (audit U1)",
+        "A18 Table 1. T20 uses 1.5 h with its Hill-form suppression (issue #12)",
     )
 
     # Coupling strengths
@@ -77,7 +77,7 @@ class ArousalParameters:
     a_v: float = _p(-10.3, "mV", "P18 Table 2")
 
     # Wake effort
-    v_we: float = _p(-0.07, "mV", "P18 Table 2. P16 states +0.07 (audit U2)")
+    v_we: float = _p(-0.07, "mV", "P18 Table 2. P16 states +0.07 (issue #13)")
     v_th: float = _p(-2.0, "mV", "P18 Table 2")
 
     # Firing rate
@@ -107,7 +107,7 @@ class ArousalParameters:
     s_c: float = _p(
         1.0 / 223.5,
         "W/m^2",
-        "T20 p. 7 prints 223.5 m^2/W; inverted for a dimensionless exponent (audit D3)",
+        "T20 p. 7 prints 223.5 m^2/W; inverted for a dimensionless exponent (issue #10)",
     )
 
     # Melatonin suppression
@@ -198,7 +198,7 @@ def melatonin_suppression(E_mel: Value, p: ArousalParameters) -> Value:
 
     The logistic form of A18 Eq 4 with the Hill-form parameters of T20 Eq 9.
     That pairing gives r = 0.509 in darkness, where both papers have r = 1
-    (audit D2).
+    (issue #9).
     """
     return 1 - p.r_a / (1 + exp(-(E_mel - p.r_b) / p.r_c))
 
@@ -208,7 +208,7 @@ def circadian_phase(X: Value, Y: Value) -> Value:
 
     Two-quadrant `arctan(Y / X)`, as the papers print it, so phi stays in
     (-pi/2, pi/2). The synthesis window [phi_on, phi_off] needs the full circle
-    from a four-quadrant arctangent (audit D1).
+    from a four-quadrant arctangent (issue #8).
     """
     return np.arctan(Y / X)
 

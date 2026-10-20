@@ -55,8 +55,6 @@ extend-exclude = [
     # Notebooks from before the library, kept as history; they import the
     # pre-library modules and no longer run.
     "notebooks/archive/",
-    # Research notes quote the legacy code verbatim in their code blocks.
-    "docs/research/",
 ]
 
 [tool.ruff.lint]

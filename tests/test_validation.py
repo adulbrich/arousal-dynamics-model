@@ -1,9 +1,14 @@
 """The model against `data/output.csv`, reference KSS from the original authors' model.
 
 The file holds 48 hours of light (melanopic EDI, lux) and KSS at 10-second
-steps for a wake 08:00 to 20:00 protocol. Its provenance is recorded in
-`docs/research/2026-10-19-circadian-model-landscape.md`. `data/` is not
-committed, so this test runs only where the file is present.
+steps for a wake 08:00 to 20:00 protocol. It is a spreadsheet export with no
+history in git. Its light follows the entrainment schedule of Postnova et al.
+2018, p. 204 (250 lux from 08:00 to 20:00, 40 lux otherwise while awake, 0 lux
+asleep), with three differences: every level is scaled by an unexplained
+0.6745812, each switch ramps over about half an hour, and 40 lux stays on
+through the night. Day 1's 09:00 to 16:00 is instead the profile in
+`data/input_irradiance_mel.csv`, at about 1.1 times its `illuminance_mel`.
+`data/` is not committed, so this test runs only where the file is present.
 
 With the model's own initial state the KSS error while awake was 0.285 when
 this test was written (0.146 after 14 days of entrainment, which suggests the

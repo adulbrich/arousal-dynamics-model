@@ -82,11 +82,16 @@ left out on purpose.
 ## Known discrepancies with the papers
 
 The code reproduces the original implementation exactly, including where it departs from
-the papers. `docs/research/2026-10-19-equation-audit.md` checks every equation and constant
-against the four papers and sorts the differences into code bugs, documented deviations,
-paper errors and open questions. The two code bugs, the circadian phase (D1) and the
-melatonin suppression form (D2), are tests marked as expected failures in
-`tests/test_invariants.py`; each fix lands in its own pull request.
+the papers. The equation audit ([issue #7][audit]) checks every equation and constant
+against the four papers; each discrepancy is an issue of its own, with a recommendation.
+The two code bugs, the circadian phase ([#8][i8]) and the melatonin suppression form
+([#9][i9]), are tests marked as expected failures in `tests/test_invariants.py`; each fix
+lands in its own pull request.
+
+[audit]: https://github.com/adulbrich/arousal-dynamics-model/issues/7
+[i8]: https://github.com/adulbrich/arousal-dynamics-model/issues/8
+[i9]: https://github.com/adulbrich/arousal-dynamics-model/issues/9
+[i11]: https://github.com/adulbrich/arousal-dynamics-model/issues/11
 
 Two numerical facts worth knowing before comparing against data. From its default initial
 state the model takes about two weeks to entrain to a regular schedule, so start a
@@ -110,8 +115,8 @@ For the notebooks, `uv sync --group notebooks` and `uv run jupyter lab`;
 
 ## To Do
 
-- [ ] fix the audited discrepancies with the papers, one pull request each
-- [ ] decide the alertness sigmoid constants S_b and S_c for daytime (audit E3)
+- [ ] fix the audited discrepancies with the papers ([issue #7][audit]), one pull request each
+- [ ] find out why Tekieh 2020 Fig 6 is wider than its Eq 14 ([issue #11][i11])
 - [ ] an entrainment helper that starts a run from a steady state
 - [ ] an event-aware solver for the sleep/wake and forced-wake switches
 - [ ] a notebook to run scenarios and compare outputs (aMT6s, rho_b, KSS)

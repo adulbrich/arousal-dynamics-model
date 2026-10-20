@@ -2,7 +2,7 @@
 
 These tests prove that a refactor changes no numbers. The arrays under
 `tests/test_golden/` were written by the legacy code, bugs included: the
-equation audit lists the known discrepancies with the papers, and each fix
+equation audit (issue #7) lists the known discrepancies with the papers, and each fix
 lands in a pull request of its own that regenerates the affected files with
 
     uv run pytest tests/test_golden.py --force-regen
