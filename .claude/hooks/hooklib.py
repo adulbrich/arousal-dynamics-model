@@ -523,14 +523,21 @@ _KEYWORDS = frozenset({"!", "{", "then", "do", "else", "elif", "if", "while", "u
 # Each wrapper, with the options of its own that take a value. The sets are
 # per wrapper on purpose: `-n` takes a value in xargs and nice, not in sudo.
 _WRAPPERS: dict[str, frozenset[str]] = {
-    "sudo": frozenset({"-u", "-g", "-C", "-D", "-h", "-p", "-r", "-t", "-U"}),
+    "sudo": frozenset(
+        {"-u", "-g", "-C", "-D", "-h", "-p", "-r", "-t", "-U", "-R", "-T", "--user", "--group"}
+        | {"--host", "--prompt", "--role", "--type", "--other-user", "--chdir", "--chroot"}
+        | {"--close-from", "--command-timeout"}
+    ),
     "env": frozenset({"-u", "--unset", "-C", "--chdir", "-S", "--split-string"}),
     "command": frozenset(),
     "exec": frozenset({"-a"}),
     "nohup": frozenset(),
     "nice": frozenset({"-n", "--adjustment"}),
     "timeout": frozenset({"-s", "--signal", "-k", "--kill-after"}),
-    "xargs": frozenset({"-n", "-I", "-L", "-P", "-d", "-E", "-s", "-a"}),
+    "xargs": frozenset(
+        {"-n", "-I", "-L", "-P", "-d", "-E", "-s", "-a", "--max-args", "--max-lines"}
+        | {"--max-procs", "--delimiter", "--arg-file", "--max-chars", "--eof", "--replace"}
+    ),
 }
 # Wrappers whose first plain argument is theirs, not the command's.
 _WRAPPER_FIRST_ARG = frozenset({"timeout"})

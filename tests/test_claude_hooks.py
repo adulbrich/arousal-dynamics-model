@@ -189,6 +189,7 @@ class TestGuardGit:
             ("sudo -n git add -A", "Stage files by name"),
             ("sudo -u alex git add -A", "Stage files by name"),
             ("sudo --user alex git add -A", "Stage files by name"),
+            ("sudo --user git git add -A", "Stage files by name"),
             ("sudo --unknown-option value git add -A", "Stage files by name"),
             ("timeout --foreground 60 git push -f origin main", "force push at main"),
             ("sudo -E timeout 60 git add -A", "Stage files by name"),
