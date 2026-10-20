@@ -41,9 +41,10 @@ the `Model` interface (ADR 0001).
 - Issue #11, why T20's own alerting dose-response (Fig 6) is wider than its Eq 14 at the
   S_c the authors gave, stays open as a reproduction question inside this model's scope,
   with the other findings of the equation audit (issue #7).
-- The daytime evidence points to structure this model lacks: an alerting response that
-  may keep growing across decades of light (about 0.5 KSS point per decade of melanopic
-  EDI in everyday life, Didikoglu et al. 2023, doi:10.1073/pnas.2301608120, open data
+- The daytime evidence (issue #16, with the targets a daytime model must reproduce)
+  points to structure this model lacks: an alerting response that may keep growing
+  across decades of light (about 0.5 KSS point per decade of melanopic EDI in everyday
+  life, Didikoglu et al. 2023, doi:10.1073/pnas.2301608120, open data
   doi:10.48420/23786238; weak in the laboratory, Smolders et al. 2018,
   doi:10.1177/0748730418796438), light history over days rather than the hours of the
   photoreceptor state P (Postnova et al. 2018, Table 1 Eq 6; Chang et al. 2011,
