@@ -313,16 +313,11 @@ RECORDS_COMMIT = {
 }
 
 
-# Updating main from its upstream fast-forwards when main carries no commits
-# of its own, which the never-commit-on-main rule guarantees.
-UPSTREAM_REFS = frozenset({"origin/main", "@{u}", "@{upstream}", "FETCH_HEAD"})
-
-
 def _records_commit(call: GitCall) -> bool:
+    # Updating main from its upstream goes through `git pull` or `merge
+    # --ff-only`: a bare `git merge origin/main` may create a merge commit.
     exempt = RECORDS_COMMIT.get(call.sub)
-    if exempt is None or any(a.value in exempt for a in call.args):
-        return False
-    return not (call.sub == "merge" and any(a.value in UPSTREAM_REFS for a in call.args))
+    return exempt is not None and not any(a.value in exempt for a in call.args)
 
 
 class Taken(NamedTuple):

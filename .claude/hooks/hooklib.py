@@ -327,13 +327,16 @@ class _Scanner:
         """Return the index after the `))` closing arithmetic, where `<<` is a shift.
 
         Quoted spans and newlines inside are skipped. None when the parentheses
-        do not close as `))`, as in `((cd x) && y)`: then it is not arithmetic,
-        and the caller scans it as code.
+        do not close as `))`, as in `((cd x) && y)`, or when a command
+        substitution sits inside: then the caller scans it as code, so the
+        command stays visible.
         """
         depth = 0
         j = i
         while j < len(self.text):
             c = self.text[j]
+            if c == "`" or self.text.startswith("$(", j):
+                return None
             if c == "'":
                 j = self.single_end(j)
                 continue
@@ -548,9 +551,22 @@ def words(segment: Segment) -> list[Word]:
         elif word in _WRAPPERS:
             i += 1
             while i < len(found) and found[i].masked.startswith("-"):
-                i += 2 if found[i].masked in _WRAPPERS[word] else 1
-            if word in _WRAPPER_FIRST_ARG:
-                i += 1  # timeout's duration
+                option = found[i].masked
+                following = found[i + 1].value if i + 1 < len(found) else ""
+                # An option known to take a value takes the next word. One not
+                # known either way is assumed to, unless the next word is an
+                # option or a command these hooks watch: failing closed.
+                watched = following.rsplit("/", 1)[-1] in {"git", "gh"}
+                takes = option in _WRAPPERS[word] or (
+                    "=" not in option and not following.startswith("-") and not watched
+                )
+                i += 2 if takes else 1
+            if (
+                word in _WRAPPER_FIRST_ARG
+                and i < len(found)
+                and found[i].value.rsplit("/", 1)[-1] not in {"git", "gh"}
+            ):
+                i += 1  # timeout's duration, unless an option above already took it
         else:
             break
     return found[i:]

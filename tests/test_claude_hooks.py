@@ -188,6 +188,10 @@ class TestGuardGit:
             ("sudo -E git add -A", "Stage files by name"),
             ("sudo -n git add -A", "Stage files by name"),
             ("sudo -u alex git add -A", "Stage files by name"),
+            ("sudo --user alex git add -A", "Stage files by name"),
+            ("sudo --unknown-option value git add -A", "Stage files by name"),
+            ("timeout --foreground 60 git push -f origin main", "force push at main"),
+            ("echo $(( $(git reset --hard) ))", "reset --hard"),
             ('echo "$((1 << 3))"\ngit add -A', "Stage files by name"),
             ("cat <<< 'x'\ngit reset --hard", "reset --hard"),
             ("echo $((1<<2))\ngit clean -fd", "clean -f"),
@@ -252,6 +256,8 @@ class TestGuardGit:
         "command",
         [
             "git merge --no-ff feat/x",
+            "git merge origin/main",
+            "git merge --no-ff origin/main",
             "git cherry-pick abc123",
             "git revert --no-edit HEAD",
             "git am p",
@@ -268,7 +274,7 @@ class TestGuardGit:
         assert guard_git.refusal(command, str(on_main)) is None
 
     @pytest.mark.parametrize(
-        "command", ["git merge --squash feat/x", "git merge origin/main", "git merge @{u}"]
+        "command", ["git merge --squash feat/x", "git merge --ff-only origin/main"]
     )
     def test_merges_that_record_nothing_on_main(self, on_main: Path, command: str) -> None:
         assert guard_git.refusal(command, str(on_main)) is None
