@@ -324,15 +324,20 @@ class _Scanner:
     def arithmetic_end(self, i: int) -> int | None:
         """Return the index after the `))` closing arithmetic, where `<<` is a shift.
 
-        None when the parentheses do not close as `))`, or a quote or newline
-        comes first: then it is not arithmetic, and the caller scans it as code.
+        Quoted spans and newlines inside are skipped. None when the parentheses
+        do not close as `))`, as in `((cd x) && y)`: then it is not arithmetic,
+        and the caller scans it as code.
         """
         depth = 0
         j = i
         while j < len(self.text):
             c = self.text[j]
-            if c in "'\"\n":
-                return None
+            if c == "'":
+                j = self.single_end(j)
+                continue
+            if c == '"':
+                j = self.double_end(j)
+                continue
             if c == "(":
                 depth += 1
             elif c == ")":

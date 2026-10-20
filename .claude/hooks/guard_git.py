@@ -80,29 +80,48 @@ def _has_flag(args: list[Word], long: str, letter: str = "") -> bool:
     return any(a.value == long or (letter and _short_flag(a.value, letter)) for a in args)
 
 
-def _dry_run(args: list[Word], takes_value: frozenset[str] = frozenset()) -> bool:
-    """Tell whether `-n` or `--dry-run` is given as an option.
+def _dry_run(args: list[Word], short_with_arg: frozenset[str], booleans: frozenset[str]) -> bool:
+    """Tell whether the options, read as git reads them, leave a dry run in force.
 
-    Options are read in order up to `--`, and the value of an option in
-    `takes_value` is skipped, so `-e -n` (exclude a file named -n) is not a
-    dry run. A cluster is not read here: in one, `n` can be another option's
-    value (`-on`).
+    Options are read in order up to `--`; the last word wins, so a
+    `--no-dry-run` (or any abbreviation of it) after `-n` cancels it. The
+    value of a short option in `short_with_arg` is skipped, and so is the word
+    after any long option not known to be a plain switch, since git accepts
+    abbreviations (`--excl` for `--exclude`) and the hook must not read a
+    value as `-n`. Unknown input therefore leans towards refusing. A cluster
+    is not read here: in one, `n` can be another option's value (`-on`).
     """
+    dry = False
     skip = False
     for a in args:
+        value = a.value
         if skip:
             skip = False
-        elif a.value == "--":
-            return False
-        elif a.value in takes_value:
+        elif value == "--":
+            break
+        elif value.startswith("--no-d"):
+            dry = False
+        elif value in {"--dry-run", "-n"}:
+            dry = True
+        elif value in short_with_arg or (
+            value.startswith("--") and "=" not in value and value not in booleans
+        ):
             skip = True
-        elif a.value in {"--dry-run", "-n"}:
-            return True
-    return False
+    return dry
 
 
-ADD_WITH_ARG = frozenset({"--pathspec-from-file"})
-CLEAN_WITH_ARG = frozenset({"-e", "--exclude"})
+ADD_WITH_ARG = frozenset()
+ADD_BOOLEANS = frozenset(
+    {"--all", "--update", "--force", "--verbose", "--intent-to-add", "--patch", "--edit"}
+)
+CLEAN_WITH_ARG = frozenset({"-e"})
+CLEAN_BOOLEANS = frozenset({"--force", "--quiet", "--interactive"})
+PUSH_SHORT_WITH_ARG = frozenset({"-o"})
+PUSH_BOOLEANS = frozenset(
+    {"--force", "--all", "--mirror", "--tags", "--follow-tags", "--set-upstream", "--verbose"}
+    | {"--quiet", "--no-verify", "--atomic", "--porcelain", "--delete", "--prune"}
+    | {"--force-with-lease", "--force-if-includes", "--progress", "--thin", "--ipv4", "--ipv6"}
+)
 
 
 # One rule per subcommand. Each returns the refusal, or None.
@@ -110,7 +129,7 @@ CLEAN_WITH_ARG = frozenset({"-e", "--exclude"})
 
 def add_rule(call: GitCall) -> str | None:
     """Refuse `git add` of everything, unless it is a dry run."""
-    if _dry_run(call.args, ADD_WITH_ARG):
+    if _dry_run(call.args, ADD_WITH_ARG, ADD_BOOLEANS):
         return None
     sweeping = any(
         a.value == "--all" or a.value in WIPE_PATHSPECS or _short_flag(a.value, "A")
@@ -161,7 +180,7 @@ def _head(ref: str) -> bool:
 
 def push_rule(call: GitCall) -> str | None:
     """Refuse a force push that lands on main."""
-    if _dry_run(call.args, PUSH_WITH_ARG):
+    if _dry_run(call.args, PUSH_SHORT_WITH_ARG, PUSH_BOOLEANS):
         return None
     positional: list[str] = []
     skip = False
@@ -204,25 +223,31 @@ def reset_rule(call: GitCall) -> str | None:
 def _clean_dry_run(args: list[Word]) -> bool:
     """Tell whether a `git clean` is a dry run, clusters included.
 
-    In clean only `-e` takes a value, so an `n` before any `e` in a cluster is
-    `-n`, and a cluster ending in `e` takes the next word.
+    Read as `_dry_run` reads options, last word winning. In clean only `-e`
+    takes a value, so an `n` before any `e` in a cluster is `-n`, and a
+    cluster ending in `e` takes the next word.
     """
+    dry = False
     skip = False
     for a in args:
         value = a.value
         if skip:
             skip = False
         elif value == "--":
-            return False
-        elif value in CLEAN_WITH_ARG:
-            skip = True
-        elif value in {"--dry-run", "-n"} or (
-            _short_flag(value, "n") and "e" not in value.split("n", 1)[0]
+            break
+        elif value.startswith("--no-d"):
+            dry = False
+        elif value in {"--dry-run", "-n"}:
+            dry = True
+        elif value in CLEAN_WITH_ARG or (
+            value.startswith("--") and "=" not in value and value not in CLEAN_BOOLEANS
         ):
-            return True
+            skip = True
+        elif _short_flag(value, "n") and "e" not in value.split("n", 1)[0]:
+            dry, skip = True, value.endswith("e")
         elif _short_flag(value, "e") and value.endswith("e"):
             skip = True
-    return False
+    return dry
 
 
 def clean_rule(call: GitCall) -> str | None:
