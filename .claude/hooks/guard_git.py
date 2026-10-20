@@ -10,13 +10,12 @@
 Everything else, including a plain push, a rebase, a stash and any dry run,
 goes through. Exit 2 blocks; stderr is the reason the model reads.
 
-Each simple command on the line is checked on its own (`hooklib.segments`),
-with quoted strings and heredoc bodies masked, so a commit message or a file
-written by `cat <<EOF` that mentions `git add -A` is not a `git add -A`. A `cd`
-earlier on the line and `git -C <dir>` move where the branch is read. `$(...)`,
-backticks and `bash -c` are not looked into; lefthook and the ruleset are the
-gate for what they hide. The hook has no `if` filter in settings.json on
-purpose: `cd x && git add -A` starts with `cd`.
+Each simple command on the line is checked on its own (`hooklib.steps`), with
+quoted strings, comments and heredoc bodies masked, so a commit message or a
+file written by `cat <<EOF` that mentions `git add -A` is not a `git add -A`.
+Options are read as git receives them, quotes removed. A `cd` earlier on the
+line and `git -C <dir>` move where the branch is read. The hook has no `if`
+filter in settings.json on purpose: `cd x && git add -A` starts with `cd`.
 """
 
 from __future__ import annotations
@@ -24,19 +23,23 @@ from __future__ import annotations
 import re
 import sys
 from collections.abc import Callable
-from pathlib import Path
 from typing import NamedTuple
 
 import hooklib
-from hooklib import Word
+from hooklib import Segment, Word
 
-SHORT_CLUSTER = re.compile(r"^-[A-Za-z]+$")
+SHORT_CLUSTER = re.compile(r"^-[A-Za-z]+")
 MAIN_REF = re.compile(r"(?:^|[:+])(?:refs/heads/)?main$")
-CAT_HEREDOC = re.compile(r"^\$\(\s*cat\s*<<")
+CAT_SUBSTITUTION = re.compile(r"^\$\(\s*cat\s*<<")
 # Global options that take a separate argument.
 GLOBAL_WITH_ARG = frozenset({"-C", "-c", "--git-dir", "--work-tree", "--exec-path", "--namespace"})
-# `git commit` short options whose value follows, in the cluster or as the next word.
-COMMIT_VALUE_OPTIONS = frozenset("mFCct")
+# `git commit` short options that take a value: in the rest of the cluster, or
+# for those in COMMIT_NEXT_WORD, the next word when the cluster ends with them.
+COMMIT_VALUE_OPTIONS = frozenset("mFCctuS")
+COMMIT_NEXT_WORD = frozenset("mFCct")
+# `git push` options whose value is the next word.
+PUSH_WITH_ARG = frozenset({"-o", "--push-option", "--repo", "--receive-pack", "--exec"})
+WIPE_PATHSPECS = frozenset({".", "./", ":/", ":/."})
 
 MAIN_COMMIT = "Never commit on main (AGENTS.md). Fetch, branch from origin/main, then commit."
 
@@ -55,31 +58,31 @@ def parse_git(segment_words: list[Word], cwd: str) -> GitCall | None:
         return None
     directory = cwd
     i = 1
-    while i < len(segment_words) and segment_words[i].masked.startswith("-"):
-        flag = segment_words[i].masked
+    while i < len(segment_words) and segment_words[i].value.startswith("-"):
+        flag = segment_words[i].value
         if flag in GLOBAL_WITH_ARG and i + 1 < len(segment_words):
             if flag == "-C":
-                target = Path(hooklib.unquote(segment_words[i + 1].text)).expanduser()
-                directory = str(target if target.is_absolute() else Path(directory) / target)
+                directory = hooklib.resolve_dir(directory, segment_words[i + 1].value)
             i += 2
         else:
             i += 1
-    sub = segment_words[i].masked if i < len(segment_words) else ""
+    sub = segment_words[i].value if i < len(segment_words) else ""
     return GitCall(sub, segment_words[i + 1 :], directory)
 
 
 def _short_flag(token: str, letter: str) -> bool:
     """Tell whether `token` is a short flag cluster carrying `letter`, as `-fd` carries `f`."""
-    return bool(SHORT_CLUSTER.match(token)) and letter in token[1:]
+    return bool(re.fullmatch(r"-[A-Za-z]+", token)) and letter in token[1:]
 
 
 def _has_flag(args: list[Word], long: str, letter: str = "") -> bool:
     """Tell whether `--long` or, given one, the short `letter` in any cluster is present."""
-    return any(a.masked == long or (letter and _short_flag(a.masked, letter)) for a in args)
+    return any(a.value == long or (letter and _short_flag(a.value, letter)) for a in args)
 
 
-def _is_dot(token: str) -> bool:
-    return token in {".", "./"}
+def _dry_run(args: list[Word]) -> bool:
+    # Only a standalone -n: in a cluster it can be another option's value (`-on`).
+    return any(a.value in {"--dry-run", "-n"} for a in args)
 
 
 # One rule per subcommand. Each returns the refusal, or None.
@@ -88,7 +91,7 @@ def _is_dot(token: str) -> bool:
 def add_rule(call: GitCall) -> str | None:
     """Refuse `git add` of everything."""
     sweeping = any(
-        a.masked in {"--all", ":/", ":/."} or _is_dot(a.masked) or _short_flag(a.masked, "A")
+        a.value == "--all" or a.value in WIPE_PATHSPECS or _short_flag(a.value, "A")
         for a in call.args
     )
     if sweeping:
@@ -100,15 +103,23 @@ def add_rule(call: GitCall) -> str | None:
 
 
 def _commit_stages_all(args: list[Word]) -> bool:
+    skip = False
     for a in args:
-        if a.masked == "--all":
+        if skip:
+            skip = False
+            continue
+        if a.value == "--all":
             return True
-        if SHORT_CLUSTER.match(a.masked):
-            for letter in a.masked[1:]:
-                if letter in COMMIT_VALUE_OPTIONS:
-                    break  # the rest of the cluster is that option's value: `-ma` is message "a"
-                if letter == "a":
-                    return True
+        if not SHORT_CLUSTER.match(a.value) or a.value.startswith("--"):
+            continue
+        for k, letter in enumerate(a.value[1:], start=1):
+            if letter in COMMIT_VALUE_OPTIONS:
+                # The rest is that option's value (`-ma` is the message "a");
+                # a cluster that ends on it takes the next word instead.
+                skip = letter in COMMIT_NEXT_WORD and k == len(a.value) - 1
+                break
+            if letter == "a":
+                return True
     return False
 
 
@@ -122,26 +133,39 @@ def commit_rule(call: GitCall) -> str | None:
     return None
 
 
+def _head(ref: str) -> bool:
+    return ref.startswith(("HEAD", "@"))
+
+
 def push_rule(call: GitCall) -> str | None:
     """Refuse a force push that lands on main."""
-    if _has_flag(call.args, "--dry-run", "n"):
+    if _dry_run(call.args):
         return None
-    positional = [a.masked for a in call.args if not a.masked.startswith("-")]
+    positional: list[str] = []
+    skip = False
+    for a in call.args:
+        if skip:
+            skip = False
+        elif a.value in PUSH_WITH_ARG:
+            skip = True
+        elif not a.value.startswith("-"):
+            positional.append(a.value)
     refspecs = positional[1:]
     forced = (
         _has_flag(call.args, "--force", "f")
-        or any(a.masked.startswith("--force-with-lease") for a in call.args)
+        or any(a.value.startswith("--force-with-lease") for a in call.args)
         or any(r.startswith("+") for r in refspecs)
     )
     if not forced:
         return None
+    on_main = hooklib.current_branch(call.directory) == "main"
     if refspecs:
-        on_head = any(r.lstrip("+") == "HEAD" for r in refspecs)
-        at_main = any(MAIN_REF.search(r) for r in refspecs) or (
-            on_head and hooklib.current_branch(call.directory) == "main"
+        targets = [r.lstrip("+") for r in refspecs]
+        at_main = any(MAIN_REF.search(t) for t in targets) or (
+            on_main and any(_head(t) and ":" not in t for t in targets)
         )
     else:
-        at_main = hooklib.current_branch(call.directory) == "main"
+        at_main = on_main
     return "No force push at main. The ruleset would reject it anyway." if at_main else None
 
 
@@ -157,14 +181,14 @@ def reset_rule(call: GitCall) -> str | None:
 
 def clean_rule(call: GitCall) -> str | None:
     """Refuse `git clean -f` unless it is a dry run."""
-    if _has_flag(call.args, "--force", "f") and not _has_flag(call.args, "--dry-run", "n"):
+    if _has_flag(call.args, "--force", "f") and not _dry_run(call.args):
         return "No `git clean -f` from an agent. Ask the user to run it."
     return None
 
 
 def branch_rule(call: GitCall) -> str | None:
     """Refuse a forced branch delete."""
-    if any(_short_flag(a.masked, "D") for a in call.args) or (
+    if any(_short_flag(a.value, "D") for a in call.args) or (
         _has_flag(call.args, "--delete", "d") and _has_flag(call.args, "--force", "f")
     ):
         return "No `git branch -D` from an agent. Use `-d`, or ask the user to force-delete."
@@ -172,18 +196,18 @@ def branch_rule(call: GitCall) -> str | None:
 
 
 def checkout_rule(call: GitCall) -> str | None:
-    """Refuse `git checkout .`."""
-    if any(_is_dot(a.masked) for a in call.args):
+    """Refuse `git checkout .` and `git checkout :/`."""
+    if any(a.value in WIPE_PATHSPECS for a in call.args):
         return "No working-tree wipe (`git checkout .`) from an agent. Name the paths to restore."
     return None
 
 
 def restore_rule(call: GitCall) -> str | None:
-    """Refuse `git restore .` on the working tree."""
+    """Refuse `git restore .` and `git restore :/` on the working tree."""
     index_only = _has_flag(call.args, "--staged", "S") and not _has_flag(
         call.args, "--worktree", "W"
     )
-    if any(_is_dot(a.masked) for a in call.args) and not index_only:
+    if any(a.value in WIPE_PATHSPECS for a in call.args) and not index_only:
         return "No working-tree wipe (`git restore .`) from an agent. Name the paths to restore."
     return None
 
@@ -200,94 +224,85 @@ RULES: dict[str, Callable[[GitCall], str | None]] = {
 }
 
 
-def _creates_branch(call: GitCall) -> bool:
-    flags = {a.masked for a in call.args}
-    return (
-        (call.sub == "checkout" and bool(flags & {"-b", "-B"}))
-        or (call.sub == "switch" and bool(flags & {"-c", "-C"}))
-        or (call.sub == "worktree" and bool(call.args) and call.args[0].masked == "add")
+def _switches_to_new_branch(call: GitCall) -> bool:
+    flags = {a.value for a in call.args}
+    return (call.sub == "checkout" and bool(flags & {"-b", "-B"})) or (
+        call.sub == "switch" and bool(flags & {"-c", "-C", "--create", "--force-create"})
     )
 
 
-def _heredoc_after(command: str, offset: int) -> str | None:
-    body = hooklib.HEREDOC.search(command, offset)
-    return body.group(3) if body else None
+class Taken(NamedTuple):
+    """A message value an option gives (None for none), and the index of its last word."""
 
-
-def _message_part(value: str) -> str | None:
-    """Return a `-m` value as git records it, or None when it is a substitution not read here."""
-    if CAT_HEREDOC.match(value):
-        body = hooklib.HEREDOC.search(value)
-        return body.group(3) if body else None
-    return None if "$(" in value or "`" in value else value
+    value: str | None
+    last: int
 
 
 class _UnreadableError(Exception):
     """The message comes from somewhere this hook does not read: a file, an editor, a commit."""
 
 
-Found = tuple["str | None", int]
-
-
-def _long_option(args: list[Word], i: int, command: str, offset: int) -> Found | None:
+def _long_option(args: list[Word], i: int, heredoc: str | None) -> Taken | None:
     """Read `--message` and `--file -`; None when `args[i]` is neither."""
-    word = args[i]
-    following = args[i + 1] if i + 1 < len(args) else None
-    if word.masked.startswith("--message="):
-        return hooklib.unquote(word.text[len("--message=") :]), i
-    if word.masked == "--message" and following is not None:
-        return hooklib.unquote(following.text), i + 1
-    if word.masked in {"-F", "--file"} or word.masked.startswith("--file="):
-        inline = word.masked[len("--file=") :] if "=" in word.masked else None
-        source = inline if inline is not None else (following.masked if following else "")
-        if source != "-":
+    word = args[i].value
+    following = args[i + 1].value if i + 1 < len(args) else None
+    if word.startswith("--message="):
+        return Taken(word[len("--message=") :], i)
+    if word == "--message" and following is not None:
+        return Taken(following, i + 1)
+    if word in {"-F", "--file"} or word.startswith("--file="):
+        inline = word.split("=", 1)[1] if "=" in word else None
+        source = inline if inline is not None else following
+        if source != "-" or heredoc is None:
             raise _UnreadableError
-        return _heredoc_after(command, offset), i if inline is not None else i + 1
+        return Taken(heredoc, i if inline is not None else i + 1)
     return None
 
 
-def _short_cluster(args: list[Word], i: int) -> Found:
+def _short_cluster(args: list[Word], i: int) -> Taken:
     """Read `-m` in a short cluster, its value attached (`-mWIP`) or the next word."""
-    word = args[i]
-    if not SHORT_CLUSTER.match(word.masked):
-        return None, i
-    for j, letter in enumerate(word.text[1:], start=1):
+    word = args[i].value
+    if not SHORT_CLUSTER.match(word) or word.startswith("--"):
+        return Taken(None, i)
+    for k, letter in enumerate(word[1:], start=1):
         if letter not in COMMIT_VALUE_OPTIONS:
             continue
+        rest = word[k + 1 :]
+        takes_next = letter in COMMIT_NEXT_WORD and not rest and i + 1 < len(args)
         if letter != "m":
-            raise _UnreadableError  # -F file, -C or -c reuse a message this hook cannot read
-        rest = word.text[j + 1 :]
-        if rest or i + 1 >= len(args):
-            return hooklib.unquote(rest), i
-        return hooklib.unquote(args[i + 1].text), i + 1
-    return None, i
+            if letter in {"F", "C", "c"}:
+                raise _UnreadableError  # a file, or a message reused from a commit
+            return Taken(None, i + 1 if takes_next else i)
+        return Taken(args[i + 1].value, i + 1) if takes_next else Taken(rest, i)
+    return Taken(None, i)
 
 
-def _option(args: list[Word], i: int, command: str, offset: int) -> Found:
-    """Return the message value option `args[i]` gives, if any, and the index of its last word."""
-    found = _long_option(args, i, command, offset)
-    return found if found is not None else _short_cluster(args, i)
+def _message_part(value: str, heredoc: str | None) -> str | None:
+    """Return a message value as git records it, or None when it is a substitution not read."""
+    if CAT_SUBSTITUTION.match(value):
+        return heredoc
+    return None if "$(" in value or "`" in value else value
 
 
-def commit_message(segment: hooklib.Segment, call: GitCall, command: str) -> str | None:
+def commit_message(segment: Segment, call: GitCall) -> str | None:
     """Return the message this `git commit` would record, or None when it cannot be read here.
 
     That covers `-m`, `-mVALUE`, a cluster ending in `m`, `--message`,
     `--message=`, the harness's `-m "$(cat <<'EOF' ... EOF)"`, and `-F -` fed
-    by a heredoc. A message from a file or an editor is left to lefthook's
-    `commit-msg`.
+    by a heredoc on the same command. A message from a file or an editor is
+    left to lefthook's `commit-msg`.
     """
     parts: list[str] = []
     i = 0
     try:
         while i < len(call.args):
-            value, i = _option(call.args, i, command, segment.start)
-            if value is not None:
-                part = _message_part(value)
+            taken = _long_option(call.args, i, segment.heredoc) or _short_cluster(call.args, i)
+            if taken.value is not None:
+                part = _message_part(taken.value, segment.heredoc)
                 if part is None:
                     return None
                 parts.append(part)
-            i += 1
+            i = taken.last + 1
     except _UnreadableError:
         return None
     return "\n\n".join(parts) if parts else None
@@ -295,29 +310,28 @@ def commit_message(segment: hooklib.Segment, call: GitCall, command: str) -> str
 
 def refusal(command: str, cwd: str) -> str | None:
     """Return the reason to refuse `command`, or None to let it run."""
-    here = cwd
-    branched = False
-    for segment in hooklib.segments(command):
-        segment_words = hooklib.words(segment)
-        here = hooklib.change_directory(here, segment_words)
-        call = parse_git(segment_words, here)
+    branched: set[str] = set()
+    for step in hooklib.steps(command, cwd):
+        call = parse_git(step.words, step.cwd)
         if call is None:
             continue
         rule = RULES.get(call.sub)
         reason = rule(call) if rule else None
         if reason:
             return reason
+        here = hooklib.real(call.directory)
         if call.sub == "commit" and not _has_flag(call.args, "--dry-run"):
-            if not branched and hooklib.current_branch(call.directory) == "main":
+            if here not in branched and hooklib.current_branch(call.directory) == "main":
                 return MAIN_COMMIT
-            message = commit_message(segment, call, command)
+            message = commit_message(step.segment, call)
             rules = hooklib.load_script(call.directory, "check_commit_message")
             if message is not None and rules is not None:
                 problems = rules.check_commit_message(message)
                 if problems:
                     listed = "\n".join(f"- {p}" for p in problems)
                     return f"Commit message fails the rule (AGENTS.md):\n{listed}"
-        branched = branched or _creates_branch(call)
+        if _switches_to_new_branch(call):
+            branched.add(here)
     return None
 
 

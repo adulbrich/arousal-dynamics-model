@@ -67,8 +67,9 @@ constant moves far more than that. `tests/test_golden.py` explains the numbers.
 ## Tests
 
 `uv run pytest` runs everything; `uv run pytest -m "not slow"` is what the pre-push hook
-runs. CI adds branch coverage (at least 95 %) and the `ci` Hypothesis profile, which
-draws more examples with a fixed seed so a failure reproduces from the log.
+runs. CI adds branch coverage (at least 95 %), the `ci` Hypothesis profile, which
+draws more examples with a fixed seed so a failure reproduces from the log, and a
+Python 3.9 in `HOOK_PYTHON`, under which the Claude Code hooks are run end to end.
 
 | File | What it pins |
 | --- | --- |
@@ -80,6 +81,7 @@ draws more examples with a fixed seed so a failure reproduces from the log.
 | `test_validation.py` | KSS against `data/output.csv`, the authors' reference; skipped when `data/` is absent. |
 | `test_notebooks.py` | `notebooks/*.ipynb` run, and are committed without outputs. |
 | `test_plotting.py`, `test_gate_scripts.py` | The plotting helpers and the scripts behind the gates. |
+| `test_claude_hooks.py` | The Claude Code hooks: each rule, the shell scanner, path resolution, the trust check, and each hook run as Claude Code runs it. |
 
 A discrepancy with a paper that is not fixed yet is a test marked
 `xfail(strict=True)` with its issue number in its reason. The pull request that fixes it
@@ -137,6 +139,8 @@ golden-output rule, which only review can enforce.
 hooks under `.claude/hooks/`, the middle column above. A fresh clone asks to trust
 the project settings once. The hooks are standard-library Python run by the
 `python3` on PATH, which on macOS may be the system 3.9; `tests/test_claude_hooks.py`
-keeps them to that. `SessionStart` prints the branch, uncommitted paths, and whether
-the uv on PATH is new enough. `.claude/skills/correctness-review/` is the
+keeps them to that. They guard against mistakes, not deliberate evasion: `bash -c`
+and a command held in a variable are not looked into. `SessionStart` prints the
+branch, uncommitted paths, other worktrees, branches whose remote is gone, and
+whether the uv on PATH is new enough. `.claude/skills/correctness-review/` is the
 correctness half of the review loop.

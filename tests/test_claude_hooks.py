@@ -109,6 +109,15 @@ class TestGuardGit:
             f"git stash push -m 'wip' && git commit -m '{GOOD}'",
             f"git tag -a v1 -m 'Release 1' && git commit -m '{GOOD}'",
             "git -c core.editor=true rebase --continue",
+            "cat <<EOF > notes\nEOF handling is tricky\ngit add -A\nEOF",
+            "git commit -F - <<-EOF\n\tfeat: add x\n\tEOF",
+            "git commit -F msg.txt && cat <<'EOF' > notes.md\nFix: Bad\nEOF",
+            f"git commit -uall -m '{GOOD}'",
+            f"git commit -Smykey -m '{GOOD}'",
+            "git commit -m $'feat: x\\n\\nBody'",
+            "cd ~nouser-xyz && git status",
+            "git -C ~nouser-xyz status",
+            "git status\x00",
         ],
     )
     def test_allowed(self, feature: Path, command: str) -> None:
@@ -146,6 +155,24 @@ class TestGuardGit:
             (f"git commit -m '{GOOD}' && git commit -m 'WIP'", "subject"),
             ("git commit --no-verify -m '\\nfix: x'", "subject"),
             ("git commit -F - <<EOF\nWIP\nEOF", "subject"),
+            ("git commit -F - <<'MSG-END'\nWIP\nMSG-END", "subject"),
+            ("git commit -m='feat: x'", "subject"),
+            ("git reset '--hard'", "reset --hard"),
+            ('git add "-A"', "Stage files by name"),
+            ('git checkout -- "."', "checkout ."),
+            ("git checkout -- :/", "checkout ."),
+            ("git restore :/", "restore ."),
+            ("git push -f origin 'main'", "force push at main"),
+            ("git push --force \\\n  origin main", "force push at main"),
+            (f"git commit \\\n  -a -m '{GOOD}'", "Stage files by name"),
+            ("echo hi # don't\ngit add -A\necho 'x'", "Stage files by name"),
+            ("echo Don\\'t && git add -A && echo 'x'", "Stage files by name"),
+            ("echo 'x <<EOF'\ngit reset --hard\nEOF", "reset --hard"),
+            ("(cd src && git add -A)", "Stage files by name"),
+            ("{ git add -A; }", "Stage files by name"),
+            ("if true; then git add -A; fi", "Stage files by name"),
+            ("! git add -A", "Stage files by name"),
+            ("env -i git add -A", "Stage files by name"),
         ],
     )
     def test_refused(self, feature: Path, command: str, rule: str) -> None:
@@ -174,10 +201,19 @@ class TestGuardGit:
         assert reason == guard_git.MAIN_COMMIT
 
     @pytest.mark.parametrize(
-        "first", ["git switch -c fix/phase", "git checkout -b fix/phase", "git worktree add ../w"]
+        "first",
+        ["git switch -c fix/phase", "git switch --create fix/phase", "git checkout -b fix/phase"],
     )
     def test_branching_first_makes_a_commit_on_main_fine(self, on_main: Path, first: str) -> None:
         assert guard_git.refusal(f"{first} && git commit -m '{GOOD}'", str(on_main)) is None
+
+    def test_a_new_worktree_does_not_move_this_checkout(self, on_main: Path) -> None:
+        command = f"git worktree add ../w && git commit -m '{GOOD}'"
+        assert guard_git.refusal(command, str(on_main)) == guard_git.MAIN_COMMIT
+
+    def test_a_branch_made_elsewhere_does_not_count(self, feature: Path, on_main: Path) -> None:
+        command = f"git checkout -b z && cd {on_main} && git commit -m '{GOOD}'"
+        assert guard_git.refusal(command, str(feature)) == guard_git.MAIN_COMMIT
 
     def test_a_dry_run_commit_on_main_is_fine(self, on_main: Path) -> None:
         assert guard_git.refusal(f"git commit --dry-run -m '{GOOD}'", str(on_main)) is None
@@ -195,6 +231,8 @@ class TestGuardGit:
         [
             ("git push --force-with-lease", True),
             ("git push --force origin HEAD", True),
+            ("git push -f origin @", True),
+            ("git push -f -o ci.skip origin", True),
             ("git push -f origin feat/thing", False),
             ("git push -f origin HEAD:maintenance", False),
             ("git push --dry-run --force origin main", False),
@@ -234,10 +272,24 @@ class TestGuardGh:
             ("gh issue create --title t --body 'see https://claude.ai/code/session_1'", "session"),
             (f"gh pr edit 3 --body 'one {EMDASH} two'", "emdash"),
             (f"gh api repos/o/r/issues/1/comments -f body='a {EMDASH} b'", "emdash"),
+            ("gh api repos/o/r/issues -fbody='see claude.ai/code/session_1'", "session"),
+            ("gh -R o/r pr create --title 'Bad title' --body x", "squash-merge subject"),
+            ("gh pr --repo o/r create --title 'Bad title' --body x", "squash-merge subject"),
+            ("gh pr create -t'Bad title' --body x", "squash-merge subject"),
+            (
+                f"gh pr create --title '{GOOD}' --body-file - <<'EOF'\n"
+                "see claude.ai/code/session_1\nEOF",
+                "session",
+            ),
         ],
     )
     def test_refused(self, feature: Path, command: str, rule: str) -> None:
         assert any(rule in p for p in guard_gh.problems(command, str(feature)))
+
+    def test_a_broken_rule_script_still_leaves_the_session_link_rule(self, feature: Path) -> None:
+        (feature / "scripts" / "check_prose.py").write_text("this is not python(\n")
+        link = "gh issue create --title t --body 'https://claude.ai/code/session_1'"
+        assert any("session" in p for p in guard_gh.problems(link, str(feature)))
 
     @pytest.mark.parametrize(
         ("command", "where"),
@@ -311,18 +363,22 @@ class TestGuardEdits:
 class TestEditedFile:
     def test_a_relative_path_is_resolved_against_the_session(self, feature: Path) -> None:
         payload = {"cwd": str(feature / "scripts"), "tool_input": {"file_path": "../uv.lock"}}
-        assert hooklib.edited_file(payload) == (str(feature), "uv.lock")
+        assert hooklib.edited_file(payload) == (str(feature), "uv.lock", "uv.lock")
 
     def test_a_symlinked_spelling_names_the_same_file(self, feature: Path, tmp_path: Path) -> None:
         link = tmp_path / "link"
         link.symlink_to(feature)
         payload = {"cwd": str(link), "tool_input": {"file_path": str(link / "data" / "x.csv")}}
-        assert hooklib.edited_file(payload) == (str(feature), "data/x.csv")
+        edited = hooklib.edited_file(payload)
+        assert edited is not None
+        assert (edited.root, edited.path) == (str(feature), "data/x.csv")
 
     def test_a_notebook_path_counts(self, feature: Path) -> None:
         target = feature / "notebooks" / "archive" / "a.ipynb"
         payload = {"cwd": str(feature), "tool_input": {"notebook_path": str(target)}}
-        assert hooklib.edited_file(payload) == (str(feature), "notebooks/archive/a.ipynb")
+        edited = hooklib.edited_file(payload)
+        assert edited is not None
+        assert edited.path == "notebooks/archive/a.ipynb"
 
     def test_a_worktree_file_belongs_to_the_worktree(self, feature: Path, tmp_path: Path) -> None:
         _git(feature, "commit", "-q", "--allow-empty", "-m", "init")
@@ -330,9 +386,35 @@ class TestEditedFile:
         _git(feature, "worktree", "add", "-q", "-b", "other", str(tree))
         payload = {"cwd": str(feature), "tool_input": {"file_path": str(tree / "uv.lock")}}
         edited = hooklib.edited_file(payload)
-        assert edited == (str(tree.resolve()), "uv.lock")
         assert edited is not None
+        assert (edited.root, edited.path) == (str(tree.resolve()), "uv.lock")
         assert hooklib.trusted_root(edited.root) == edited.root
+
+    def test_claude_md_keeps_its_own_name(self, feature: Path) -> None:
+        (feature / "AGENTS.md").write_text("rules\n")
+        (feature / "CLAUDE.md").symlink_to("AGENTS.md")
+        payload = {"cwd": str(feature), "tool_input": {"file_path": str(feature / "CLAUDE.md")}}
+        edited = hooklib.edited_file(payload)
+        assert edited is not None
+        assert edited.path == "CLAUDE.md"
+
+    def test_a_symlinked_directory_keeps_its_written_name(
+        self, feature: Path, tmp_path: Path
+    ) -> None:
+        outside = tmp_path / "outside"
+        outside.mkdir()
+        (feature / "data").symlink_to(outside)
+        payload = {
+            "cwd": str(feature),
+            "tool_input": {"file_path": str(feature / "data" / "x.csv")},
+        }
+        edited = hooklib.edited_file(payload)
+        assert edited is not None
+        assert edited.written == "data/x.csv"
+
+    def test_an_unexpandable_home_does_not_crash(self, feature: Path) -> None:
+        payload = {"cwd": str(feature), "tool_input": {"file_path": "~nouser-xyz/y"}}
+        assert hooklib.edited_file(payload) is not None
 
     def test_no_path(self) -> None:
         assert hooklib.edited_file({"tool_input": {}}) is None
@@ -454,6 +536,14 @@ class TestTrust:
         assert after_edit.findings(str(repo), "a.py") == []
         assert not marker.exists()
 
+    def test_a_git_file_pointing_at_the_project_is_not_trusted(
+        self, feature: Path, tmp_path: Path
+    ) -> None:
+        impostor = tmp_path / "impostor"
+        impostor.mkdir()
+        (impostor / ".git").write_text(f"gitdir: {feature / '.git'}\n")
+        assert hooklib.trusted_root(str(impostor)) is None
+
     def test_the_real_project_is_trusted(self) -> None:
         assert hooklib.trusted_root(str(ROOT / "tests")) == str(ROOT.resolve())
 
@@ -558,6 +648,22 @@ class TestEndToEnd:
         decision = json.loads(result.stdout)["hookSpecificOutput"]
         assert decision["permissionDecision"] == "deny"
         assert "uv lock" in decision["permissionDecisionReason"]
+
+    @pytest.mark.parametrize("name", ["CLAUDE.md", "data"])
+    def test_guard_edits_sees_through_symlinks(
+        self, python: str, feature: Path, tmp_path: Path, name: str
+    ) -> None:
+        if name == "CLAUDE.md":
+            (feature / "AGENTS.md").write_text("rules\n")
+            (feature / "CLAUDE.md").symlink_to("AGENTS.md")
+            target = feature / "CLAUDE.md"
+        else:
+            (tmp_path / "outside").mkdir()
+            (feature / "data").symlink_to(tmp_path / "outside")
+            target = feature / "data" / "x.csv"
+        payload = {"cwd": str(feature), "tool_input": {"file_path": str(target)}}
+        result = _run_hook(python, feature, "guard_edits.py", payload)
+        assert json.loads(result.stdout)["hookSpecificOutput"]["permissionDecision"] == "deny"
 
     def test_guard_edits_is_silent_for_an_ordinary_file(self, python: str, feature: Path) -> None:
         payload = {"cwd": str(feature), "tool_input": {"file_path": str(feature / "src.py")}}

@@ -6,21 +6,23 @@ A pull request title is also the squash-merge subject, so `pr create`,
 `pr edit` and `pr merge --subject` get the Conventional Commits check.
 
 Only the `gh` commands that publish are checked, each on its own
-(`hooklib.segments`), with the files they read the text from: `--body-file`
-for pull requests and issues, `--notes-file` for releases, `--field k=@file`
-and `--input` for `gh api`. Exit 2 blocks; stderr is the reason the model
-reads. The session-link check needs no code from the checkout and runs
-anywhere; the prose and title checks load the rule scripts, so they run in
-this project and its worktrees only (`hooklib.trusted_root`).
+(`hooklib.steps`), with the text they read from elsewhere: `--body-file` for
+pull requests and issues, `--notes-file` for releases, `--field k=@file` and
+`--input` for `gh api`, and a heredoc when any of those is `-`. Exit 2 blocks;
+stderr is the reason the model reads. The session-link check needs no code
+from the checkout and runs anywhere; the prose and title checks load the rule
+scripts, so they run in this project and its worktrees only
+(`hooklib.trusted_root`).
 """
 
 from __future__ import annotations
 
+import contextlib
 import sys
 from pathlib import Path
 
 import hooklib
-from hooklib import Word
+from hooklib import Step, Word
 
 PUBLISHING = frozenset(
     {
@@ -49,66 +51,79 @@ TEXT_FILE_FLAGS = {
     "api": ("--input",),
 }
 API_WRITE_FLAGS = ("-f", "-F", "--field", "--raw-field", "--input")
+REPO_FLAGS = frozenset({"-R", "--repo"})
 
 
 def flag_values(args: list[Word], names: tuple[str, ...]) -> list[str]:
-    """Return the values given to any of `names`, as `--flag value`, `--flag=value`, `-f value`."""
+    """Return the values given to any of `names`: `--flag v`, `--flag=v`, `-f v` or `-fv`."""
     out: list[str] = []
     for i, word in enumerate(args):
+        value = word.value
         for name in names:
-            if word.masked == name and i + 1 < len(args):
-                out.append(hooklib.unquote(args[i + 1].text))
-            elif name.startswith("--") and word.masked.startswith(f"{name}="):
-                out.append(hooklib.unquote(word.text[len(name) + 1 :]))
+            if value == name and i + 1 < len(args):
+                out.append(args[i + 1].value)
+            elif name.startswith("--") and value.startswith(f"{name}="):
+                out.append(value[len(name) + 1 :])
+            elif not name.startswith("--") and value.startswith(name) and len(value) > len(name):
+                out.append(value[len(name) :])
     return out
 
 
-def text_files(group: str, args: list[Word], cwd: str) -> list[Path]:
-    """Return the files a publishing command reads its text from, resolved against `cwd`."""
-    paths = flag_values(args, TEXT_FILE_FLAGS.get(group, ()))
+def published_text(group: str, args: list[Word], step: Step) -> str:
+    """Return the text a publishing command reads from files or a heredoc."""
+    sources = flag_values(args, TEXT_FILE_FLAGS.get(group, ()))
     if group == "api":
-        paths += [v.split("=@", 1)[1] for v in flag_values(args, ("-F", "--field")) if "=@" in v]
-    out = []
-    for raw in paths:
-        if raw and raw != "-":
-            path = Path(raw).expanduser()
-            out.append(path if path.is_absolute() else Path(cwd) / path)
-    return out
+        sources += [v.split("=@", 1)[1] for v in flag_values(args, ("-F", "--field")) if "=@" in v]
+    texts = []
+    for raw in sources:
+        if raw == "-":
+            texts.append(step.segment.heredoc or "")
+        elif raw:
+            # A file not written yet, or not UTF-8, is left to pr-text on the remote.
+            with contextlib.suppress(OSError, ValueError):
+                texts.append(Path(hooklib.resolve_dir(step.cwd, raw)).read_text(encoding="utf-8"))
+    return "\n".join(texts)
 
 
-def read_text(path: Path) -> str:
-    """Return a file's text, or "" when it does not exist yet or is not UTF-8."""
-    try:
-        return path.read_text(encoding="utf-8")
-    except (OSError, ValueError):
-        return ""
+def _command(step: Step) -> tuple[str, str, list[Word]] | None:
+    """Return the group, verb and arguments of a gh call, skipping `-R/--repo`."""
+    if not step.words or not hooklib.is_command(step.words[0], "gh"):
+        return None
+    rest: list[Word] = []
+    skip = False
+    for word in step.words[1:]:
+        if skip:
+            skip = False
+        elif word.value in REPO_FLAGS:
+            skip = True
+        elif not word.value.startswith(("--repo=", "-R")) or rest:
+            rest.append(word)
+    if not rest:
+        return None
+    group = rest[0].value
+    verb = rest[1].value if len(rest) > 1 and group != "api" else ""
+    return group, verb, rest[1:]
 
 
 def _publishes(group: str, verb: str, args: list[Word]) -> bool:
     if group == "api":
-        return any(a.masked.split("=", 1)[0] in API_WRITE_FLAGS for a in args)
+        return any(a.value.startswith(API_WRITE_FLAGS) for a in args)
     return (group, verb) in PUBLISHING
 
 
 def problems(command: str, cwd: str) -> list[str]:
     """Return every rule the published text breaks; empty to let the command run."""
     found: list[str] = []
-    here = cwd
-    for segment in hooklib.segments(command):
-        segment_words = hooklib.words(segment)
-        here = hooklib.change_directory(here, segment_words)
-        if len(segment_words) < 2 or not hooklib.is_command(segment_words[0], "gh"):
+    for step in hooklib.steps(command, cwd):
+        call = _command(step)
+        if call is None or not _publishes(*call):
             continue
-        group = segment_words[1].masked
-        verb = segment_words[2].masked if len(segment_words) > 2 else ""
-        args = segment_words[2:]
-        if not _publishes(group, verb, args):
-            continue
-        text = "\n".join([segment.text, *(read_text(p) for p in text_files(group, args, here))])
+        group, verb, args = call
+        text = f"{step.segment.text}\n{published_text(group, args, step)}"
         if hooklib.SESSION_LINK in text:
             found.append(f"contains a {hooklib.SESSION_LINK} link; never publish one (AGENTS.md)")
-        prose = hooklib.load_script(here, "check_prose")
-        commit = hooklib.load_script(here, "check_commit_message")
+        prose = hooklib.load_script(step.cwd, "check_prose")
+        commit = hooklib.load_script(step.cwd, "check_commit_message")
         if prose is None or commit is None:
             continue
         found.extend(

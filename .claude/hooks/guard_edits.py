@@ -1,10 +1,10 @@
 """PreToolUse on Edit, Write and NotebookEdit: the files nobody hand-edits, with the reason.
 
 Answers with the JSON deny shape rather than exit 2, so the reason reaches the
-model verbatim and the turn continues. The edited path is resolved through
-symlinks and against the file's own checkout (`hooklib.edited_file`), and
-compared without case, since macOS file systems ignore it. Only this project
-and its worktrees are protected.
+model verbatim and the turn continues. The edited path is found in the file's
+own checkout and checked both as written and with its directories resolved
+(`hooklib.edited_file`), without case, since macOS file systems ignore it.
+Only this project and its worktrees are protected.
 """
 
 from __future__ import annotations
@@ -42,16 +42,20 @@ def main() -> int:
     edited = hooklib.edited_file(payload)
     if edited is None or hooklib.trusted_root(edited.root) is None:
         return 0
-    reason = reason_for(edited.path)
-    if reason:
-        decision = {
-            "hookSpecificOutput": {
-                "hookEventName": "PreToolUse",
-                "permissionDecision": "deny",
-                "permissionDecisionReason": f"{edited.path} is {reason}.",
+    # Both spellings: `path` keeps CLAUDE.md as itself, `written` keeps a
+    # symlinked data/ as data/.
+    for path in (edited.path, edited.written):
+        reason = reason_for(path)
+        if reason:
+            decision = {
+                "hookSpecificOutput": {
+                    "hookEventName": "PreToolUse",
+                    "permissionDecision": "deny",
+                    "permissionDecisionReason": f"{path} is {reason}.",
+                }
             }
-        }
-        sys.stdout.write(json.dumps(decision))
+            sys.stdout.write(json.dumps(decision))
+            break
     return 0
 
 

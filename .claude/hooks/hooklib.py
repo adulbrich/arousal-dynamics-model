@@ -6,10 +6,12 @@ model as the reason. The `cwd` field, not `CLAUDE_PROJECT_DIR`, is where the
 session is: inside a worktree the project dir still points at the main
 checkout. An edited file's checkout is found from the file itself.
 
-The hooks run on whatever `python3` is first on PATH, which on macOS can be
-the system Python 3.9, outside the project's virtual environment. So they use
-the standard library only and no syntax newer than 3.9;
-`tests/test_claude_hooks.py` checks both.
+The hooks guard against mistakes, not deliberate evasion: `bash -c`, `eval`
+and a variable holding a command are not looked into, and lefthook, CI and
+the branch ruleset stay the gate. They run on whatever `python3` is first on
+PATH, which on macOS can be the system Python 3.9, outside the project's
+virtual environment, so they use the standard library only and no syntax
+newer than 3.9; `tests/test_claude_hooks.py` checks both.
 """
 
 from __future__ import annotations
@@ -20,10 +22,14 @@ import os
 import re
 import subprocess
 import sys
+from collections.abc import Iterator
 from pathlib import Path
 from types import ModuleType
 from typing import Any, NamedTuple, NoReturn
 
+# The same string as SESSION_LINK in scripts/check_commit_message.py. The hooks
+# keep a copy because they apply this rule in checkouts whose scripts they do
+# not load (`trusted_root`).
 SESSION_LINK = "claude.ai/code/session"
 
 #: The checkout these hooks were installed from.
@@ -64,6 +70,31 @@ def deny(reason: str) -> NoReturn:
     sys.exit(2)
 
 
+# Paths
+
+
+def expand(raw: str) -> Path:
+    """Return `raw` with `~` expanded, or as written when that fails (`~nouser`)."""
+    try:
+        return Path(raw).expanduser()
+    except (RuntimeError, KeyError):
+        return Path(raw)
+
+
+def resolve_dir(base: str, raw: str) -> str:
+    """Return the path `raw` names when written in directory `base`."""
+    target = expand(raw)
+    return str(target if target.is_absolute() else Path(base) / target)
+
+
+def real(path: str) -> str:
+    """Return `path` with symlinks resolved, or as given when it cannot be."""
+    try:
+        return os.path.realpath(path)
+    except (OSError, ValueError):
+        return path
+
+
 # Git
 
 
@@ -86,7 +117,7 @@ def git(cwd: str, *args: str) -> str:
             env=clean_env(),
             check=False,
         )
-    except OSError:
+    except (OSError, ValueError):
         return ""
     return result.stdout.strip() if result.returncode == 0 else ""
 
@@ -101,28 +132,29 @@ def repo_root(cwd: str) -> str:
     return git(cwd, "rev-parse", "--show-toplevel") or cwd
 
 
-def _common_dir(path: str) -> str:
-    common = git(path, "rev-parse", "--git-common-dir")
-    return str((Path(path) / common).resolve()) if common else ""
-
-
 def trusted_root(cwd: str) -> str | None:
     """Return the checkout containing `cwd` if it is this project or one of its worktrees.
 
     The hooks run the repository's own rule scripts and its `.venv` tools.
     Taking them from any checkout the session has moved into would execute
     code from a repository nobody vetted, so for any other checkout this is
-    None and the hooks apply only the rules that need no code from it. A
-    worktree shares the project's git common directory, so it checks against
-    the code it carries.
+    None and the hooks apply only the rules that need no code from it. The
+    answer comes from the project's own `git worktree list`, never from the
+    candidate, whose `.git` file could point anywhere.
     """
-    root = repo_root(cwd)
-    project = _common_dir(str(PROJECT_ROOT))
-    return root if project and _common_dir(root) == project else None
+    root = real(repo_root(cwd))
+    listed = git(str(PROJECT_ROOT), "worktree", "list", "--porcelain").splitlines()
+    trusted = {real(str(PROJECT_ROOT))}
+    trusted |= {real(line[len("worktree ") :]) for line in listed if line.startswith("worktree ")}
+    return root if root in trusted else None
 
 
 def load_script(cwd: str, name: str) -> ModuleType | None:
-    """Load a rule script from the session's checkout, if it is trusted and has one."""
+    """Load a rule script from the session's checkout, if it is trusted and has one.
+
+    A script that fails to load counts as absent, so the hook still applies
+    the rules that need no script.
+    """
     root = trusted_root(cwd)
     if root is None:
         return None
@@ -141,7 +173,11 @@ def load_script(cwd: str, name: str) -> ModuleType | None:
     # Registered before it runs: `@dataclass` looks its module up in
     # `sys.modules`, and the second script imports the first by name.
     sys.modules[name] = module
-    spec.loader.exec_module(module)
+    try:
+        spec.loader.exec_module(module)
+    except Exception:
+        sys.modules.pop(name, None)
+        return None
     return module
 
 
@@ -149,132 +185,352 @@ def load_script(cwd: str, name: str) -> ModuleType | None:
 
 
 class EditedFile(NamedTuple):
-    """An edited file as its own checkout sees it."""
+    """An edited file relative to its checkout, spelled two ways.
+
+    `path` resolves the parent directories but not the file itself, so
+    `CLAUDE.md` stays `CLAUDE.md` rather than becoming its target. `written`
+    resolves nothing, so a symlinked `data/` still reads as `data/`.
+    """
 
     root: str
     path: str
+    written: str
+
+
+def _relative(path: str, root: str) -> str:
+    rel = os.path.relpath(path, root)
+    if rel.startswith(".."):
+        # A case-insensitive file system: /users/me/repo is /Users/me/repo.
+        folded = os.path.relpath(path.casefold(), root.casefold())
+        rel = rel if folded.startswith("..") else folded
+    return rel.replace("\\", "/")
 
 
 def edited_file(payload: dict[str, Any]) -> EditedFile | None:
-    """Return the checkout and repository-relative path of the file an edit tool touches.
+    """Return the checkout and paths of the file an Edit, Write or NotebookEdit touches.
 
     Edit and Write send `file_path`, NotebookEdit `notebook_path`. A relative
-    path is resolved against the session's directory, and both sides are
-    resolved through symlinks (macOS `/tmp` is `/private/tmp`), so the same
-    file always has the same name. The checkout is the one that holds the
-    file, which in a worktree is not the session's.
+    path is resolved against the session's directory. The checkout is the one
+    that holds the file, which in a worktree is not the session's; for a file
+    reached through a symlinked directory it is the session's checkout.
     """
     raw = tool_arg(payload, "file_path", "notebook_path")
     if not raw:
         return None
-    path = Path(raw).expanduser()
-    if not path.is_absolute():
-        path = Path(session_cwd(payload)) / path
-    path = Path(os.path.realpath(path))
-    anchor = path.parent
+    lexical = Path(os.path.normpath(resolve_dir(session_cwd(payload), raw)))
+    resolved = str(Path(real(str(lexical.parent))) / lexical.name)
+    anchor = lexical.parent
     while not anchor.exists() and anchor != anchor.parent:
         anchor = anchor.parent
-    root = os.path.realpath(repo_root(str(anchor)))
-    return EditedFile(root, os.path.relpath(path, root).replace("\\", "/"))
+    roots = [real(repo_root(str(anchor))), real(repo_root(session_cwd(payload)))]
+    # The checkout the file was named in comes first, then the one it lives in.
+    for root in roots:
+        if not _relative(str(lexical), root).startswith(".."):
+            break
+    else:
+        root = next((r for r in roots if not _relative(resolved, r).startswith("..")), roots[0])
+    return EditedFile(root, _relative(resolved, root), _relative(str(lexical), root))
 
 
 # Shell commands
 
 
+class Heredoc(NamedTuple):
+    """A heredoc: where its `<<` sits in the command, and its body."""
+
+    operator: int
+    body: str
+
+
+class Scan(NamedTuple):
+    """A command with quotes, comments and heredoc bodies masked, and the heredocs found."""
+
+    masked: str
+    heredocs: list[Heredoc]
+
+
+_WORD_END = frozenset(" \t\n;&|<>()")
+
+
+class _Scanner:
+    """One left-to-right pass over a shell command.
+
+    It tracks quotes, escapes, comments, `$(...)` and heredocs, and masks
+    everything that is data rather than command structure with filler of the
+    same length, so offsets found in the masked text hold in the original.
+    """
+
+    def __init__(self, command: str) -> None:
+        self.text = command
+        self.out = list(command)
+        self.heredocs: list[Heredoc] = []
+        self.pending: list[tuple[int, str, bool]] = []
+
+    def blank(self, start: int, end: int, fill: str = "x") -> None:
+        for k in range(start, min(end, len(self.out))):
+            self.out[k] = fill
+
+    def single_end(self, i: int) -> int:
+        j = self.text.find("'", i + 1)
+        return len(self.text) if j < 0 else j + 1
+
+    def ansi_end(self, i: int) -> int:
+        j = i + 2
+        while j < len(self.text):
+            if self.text[j] == "\\":
+                j += 2
+            elif self.text[j] == "'":
+                return j + 1
+            else:
+                j += 1
+        return len(self.text)
+
+    def double_end(self, i: int) -> int:
+        j = i + 1
+        while j < len(self.text):
+            c = self.text[j]
+            if c == "\\":
+                j += 2
+            elif c == '"':
+                return j + 1
+            elif self.text.startswith("$(", j):
+                j = self.walk(j + 2, nested=True)
+            elif c == "`":
+                k = self.text.find("`", j + 1)
+                j = len(self.text) if k < 0 else k + 1
+            else:
+                j += 1
+        return len(self.text)
+
+    def operator(self, i: int) -> int:
+        """Record the heredoc whose `<<` is at `i`; return where its line continues."""
+        j = i + 2
+        strip = j < len(self.text) and self.text[j] == "-"
+        j += 1 if strip else 0
+        while j < len(self.text) and self.text[j] in " \t":
+            j += 1
+        if j < len(self.text) and self.text[j] in "'\"":
+            k = self.text.find(self.text[j], j + 1)
+            k = len(self.text) if k < 0 else k
+            delimiter, j = self.text[j + 1 : k], min(k + 1, len(self.text))
+        else:
+            k = j
+            while k < len(self.text) and self.text[k] not in _WORD_END:
+                k += 1
+            delimiter, j = self.text[j:k].replace("\\", ""), k
+        if delimiter:
+            self.pending.append((i, delimiter, strip))
+        return j
+
+    def bodies(self, newline: int) -> int:
+        """Read the bodies of the heredocs pending at this newline; return where code resumes."""
+        start = newline + 1
+        resume = len(self.text)
+        for operator, delimiter, strip in self.pending:
+            lines: list[str] = []
+            j = start
+            while j < len(self.text):
+                end = self.text.find("\n", j)
+                end = len(self.text) if end < 0 else end
+                line = self.text[j:end].lstrip("\t") if strip else self.text[j:end]
+                if line == delimiter:
+                    break
+                lines.append(line)
+                j = end + 1
+            else:
+                end = len(self.text)
+            self.blank(start, end)
+            self.heredocs.append(Heredoc(operator, "\n".join(lines)))
+            start, resume = end + 1, end
+        self.pending.clear()
+        return resume
+
+    def walk(self, i: int, *, nested: bool = False) -> int:
+        """Scan unquoted text from `i`; return after the `)` that closes it when nested."""
+        while i < len(self.text):
+            c = self.text[i]
+            if c == "\\":
+                continuation = self.text.startswith("\\\n", i)
+                self.blank(i, i + 2, " " if continuation else "x")
+                i += 2
+            elif self.text.startswith("$'", i):
+                end = self.ansi_end(i)
+                self.blank(i, end)
+                i = end
+            elif c in "'\"":
+                end = self.single_end(i) if c == "'" else self.double_end(i)
+                self.blank(i, end)
+                i = end
+            elif c == "#" and (i == 0 or self.text[i - 1] in " \t\n;&|()"):
+                end = self.text.find("\n", i)
+                end = len(self.text) if end < 0 else end
+                self.blank(i, end, " ")  # a comment holds no words at all
+                i = end
+            elif self.text.startswith("<<", i) and not self.text.startswith("<<<", i):
+                i = self.operator(i)
+            elif c == "\n" and self.pending:
+                i = self.bodies(i)
+            elif c == "(":
+                i = self.walk(i + 1, nested=True)
+            elif c == ")" and nested:
+                return i + 1
+            else:
+                i += 1
+        return len(self.text)
+
+
+def scan(command: str) -> Scan:
+    """Mask a command's quoted strings, comments and heredoc bodies, and collect its heredocs."""
+    scanner = _Scanner(command)
+    scanner.walk(0)
+    return Scan("".join(scanner.out), scanner.heredocs)
+
+
+def mask(command: str) -> str:
+    """Return `command` with quoted strings, comments and heredoc bodies masked, same length."""
+    return scan(command).masked
+
+
 class Segment(NamedTuple):
-    """One simple command of a shell line: its text, the same text masked, and its offset."""
+    """One simple command: its text, the same text masked, its offset, and its heredoc body."""
 
     text: str
     masked: str
     start: int
+    heredoc: str | None
 
 
-# A heredoc: the operator, an optionally quoted delimiter, the rest of that
-# line, the body, and the delimiter alone on its line.
-HEREDOC = re.compile(
-    r"<<-?[ \t]*([\"']?)([A-Za-z_][A-Za-z0-9_]*)\1[^\n]*\n([\s\S]*?)\n[ \t]*\2(?=\s|$)"
-)
-QUOTED = re.compile(r"\"(?:[^\"\\]|\\.)*\"|'[^']*'")
-SEPARATOR = re.compile(r"&&|\|\||\|&|[;|\n]|(?<![<>&])&(?![&>])")
-ASSIGNMENT = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*=")
-WRAPPERS = frozenset({"sudo", "env", "command", "time", "exec", "nohup"})
-
-
-def _blank(text: str, start: int, end: int) -> str:
-    return text[:start] + "x" * (end - start) + text[end:]
-
-
-def mask(command: str) -> str:
-    """Return `command` with heredoc bodies and quoted strings replaced by same-length filler.
-
-    The filler holds no separator and no newline, so separators found in the
-    masked text sit at the same offsets in the original. Heredocs go first,
-    since their bodies may contain quotes.
-    """
-    masked = command
-    for match in HEREDOC.finditer(command):
-        masked = _blank(masked, match.start(3), match.end())
-    for match in QUOTED.finditer(masked):
-        masked = _blank(masked, match.start(), match.end())
-    return masked
+SEPARATOR = re.compile(r"&&|\|\||\|&|[;|\n()]|(?<![<>&])&(?![&>])")
 
 
 def segments(command: str) -> list[Segment]:
-    """Split a shell line into simple commands at `&&`, `||`, `;`, `|`, `&` and newlines.
-
-    `$(...)`, backticks and `bash -c` are not looked into; lefthook and CI
-    are the gate for what they hide.
-    """
-    masked = mask(command)
+    """Split a shell line into simple commands at operators, parentheses and newlines."""
+    scanned = scan(command)
     out: list[Segment] = []
     start = 0
-    for match in [*SEPARATOR.finditer(masked), None]:
+    for match in [*SEPARATOR.finditer(scanned.masked), None]:
         end = match.start() if match else len(command)
         if command[start:end].strip():
-            out.append(Segment(command[start:end], masked[start:end], start))
+            body = next((h.body for h in scanned.heredocs if start <= h.operator < end), None)
+            out.append(Segment(command[start:end], scanned.masked[start:end], start, body))
         start = match.end() if match else end
     return out
 
 
+_ANSI = {"n": "\n", "t": "\t", "\\": "\\", "'": "'", '"': '"'}
+
+
+def unquote(text: str) -> str:
+    """Return a shell word as the command receives it: quotes removed, escapes undone."""
+    out: list[str] = []
+    i = 0
+    while i < len(text):
+        c = text[i]
+        if c == "\\" and i + 1 < len(text):
+            out.append(text[i + 1])
+            i += 2
+        elif text.startswith("$'", i):
+            j = i + 2
+            while j < len(text) and text[j] != "'":
+                if text[j] == "\\" and j + 1 < len(text):
+                    out.append(_ANSI.get(text[j + 1], text[j : j + 2]))
+                    j += 2
+                else:
+                    out.append(text[j])
+                    j += 1
+            i = j + 1
+        elif c == "'":
+            j = text.find("'", i + 1)
+            j = len(text) if j < 0 else j
+            out.append(text[i + 1 : j])
+            i = j + 1
+        elif c == '"':
+            j = i + 1
+            while j < len(text) and text[j] != '"':
+                if text[j] == "\\" and j + 1 < len(text) and text[j + 1] in '\\"$`':
+                    j += 1
+                out.append(text[j])
+                j += 1
+            i = j + 1
+        else:
+            out.append(c)
+            i += 1
+    return "".join(out)
+
+
 class Word(NamedTuple):
-    """A whitespace-delimited word: as masked (for flags) and as written (for values)."""
+    """A word of a simple command: as masked (for structure) and as written."""
 
     masked: str
     text: str
 
+    @property
+    def value(self) -> str:
+        """Return the word as the command receives it."""
+        return unquote(self.text)
+
+
+# Words that start a command line without being the command, and wrappers
+# whose own options come before the command they run.
+_KEYWORDS = frozenset({"!", "{", "then", "do", "else", "elif", "if", "while", "until", "time"})
+_WRAPPERS = frozenset({"sudo", "env", "command", "exec", "nohup"})
+_WRAPPER_WITH_ARG = frozenset({"-u", "-g", "-C", "-S", "--unset", "--chdir"})
+ASSIGNMENT = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*=")
+
 
 def words(segment: Segment) -> list[Word]:
-    """Return the simple command's words, without leading assignments, wrappers or a comment."""
+    """Return the simple command's words, from the command name on."""
     found = [
         Word(m.group(0), segment.text[m.start() : m.end()])
         for m in re.finditer(r"\S+", segment.masked)
     ]
-    for i, word in enumerate(found):
-        if word.masked.startswith("#"):
-            found = found[:i]
+    i = 0
+    while i < len(found):
+        word = found[i].masked
+        if word in _KEYWORDS or ASSIGNMENT.match(word):
+            i += 1
+        elif word in _WRAPPERS:
+            i += 1
+            while i < len(found) and found[i].masked.startswith("-"):
+                i += 2 if found[i].masked in _WRAPPER_WITH_ARG else 1
+        else:
             break
-    while found and (ASSIGNMENT.match(found[0].masked) or found[0].masked in WRAPPERS):
-        found = found[1:]
-    return found
-
-
-def unquote(text: str) -> str:
-    """Return a shell word without its surrounding quotes, double-quote escapes undone."""
-    if len(text) >= 2 and text[0] == text[-1] == "'":
-        return text[1:-1]
-    if len(text) >= 2 and text[0] == text[-1] == '"':
-        return re.sub(r'\\([\\"$`])', r"\1", text[1:-1])
-    return text
+    return found[i:]
 
 
 def is_command(word: Word, name: str) -> bool:
     """Tell whether a command word runs `name`, bare or by path."""
-    return word.masked == name or word.masked.endswith(f"/{name}")
+    return word.value == name or word.value.endswith(f"/{name}")
 
 
 def change_directory(cwd: str, segment_words: list[Word]) -> str:
-    """Return the directory a `cd` segment moves to, or `cwd` if it is not one."""
-    if len(segment_words) < 2 or segment_words[0].masked != "cd":
+    """Return the directory a `cd` or `pushd` moves to, or `cwd` if it is not one.
+
+    A target the hook cannot know (`cd -`, `cd "$DIR"`) leaves `cwd` as it was.
+    """
+    if not segment_words or segment_words[0].value not in {"cd", "pushd"}:
         return cwd
-    target = Path(unquote(segment_words[1].text)).expanduser()
-    return str(target if target.is_absolute() else Path(cwd) / target)
+    targets = [w for w in segment_words[1:] if not (w.value.startswith("-") and w.value != "-")]
+    if not targets:
+        return cwd
+    target = targets[0].value
+    if target == "-" or "$" in target or "`" in target:
+        return cwd
+    return resolve_dir(cwd, target)
+
+
+class Step(NamedTuple):
+    """One simple command of a line, its words, and the directory it runs in."""
+
+    segment: Segment
+    words: list[Word]
+    cwd: str
+
+
+def steps(command: str, cwd: str) -> Iterator[Step]:
+    """Walk a shell line's simple commands, following `cd` from one to the next."""
+    here = cwd
+    for segment in segments(command):
+        segment_words = words(segment)
+        here = change_directory(here, segment_words)
+        yield Step(segment, segment_words, here)
