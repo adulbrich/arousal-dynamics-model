@@ -80,9 +80,29 @@ def _has_flag(args: list[Word], long: str, letter: str = "") -> bool:
     return any(a.value == long or (letter and _short_flag(a.value, letter)) for a in args)
 
 
-def _dry_run(args: list[Word]) -> bool:
-    # Only a standalone -n: in a cluster it can be another option's value (`-on`).
-    return any(a.value in {"--dry-run", "-n"} for a in args)
+def _dry_run(args: list[Word], takes_value: frozenset[str] = frozenset()) -> bool:
+    """Tell whether `-n` or `--dry-run` is given as an option.
+
+    Options are read in order up to `--`, and the value of an option in
+    `takes_value` is skipped, so `-e -n` (exclude a file named -n) is not a
+    dry run. A cluster is not read here: in one, `n` can be another option's
+    value (`-on`).
+    """
+    skip = False
+    for a in args:
+        if skip:
+            skip = False
+        elif a.value == "--":
+            return False
+        elif a.value in takes_value:
+            skip = True
+        elif a.value in {"--dry-run", "-n"}:
+            return True
+    return False
+
+
+ADD_WITH_ARG = frozenset({"--pathspec-from-file"})
+CLEAN_WITH_ARG = frozenset({"-e", "--exclude"})
 
 
 # One rule per subcommand. Each returns the refusal, or None.
@@ -90,7 +110,7 @@ def _dry_run(args: list[Word]) -> bool:
 
 def add_rule(call: GitCall) -> str | None:
     """Refuse `git add` of everything, unless it is a dry run."""
-    if _dry_run(call.args):
+    if _dry_run(call.args, ADD_WITH_ARG):
         return None
     sweeping = any(
         a.value == "--all" or a.value in WIPE_PATHSPECS or _short_flag(a.value, "A")
@@ -141,7 +161,7 @@ def _head(ref: str) -> bool:
 
 def push_rule(call: GitCall) -> str | None:
     """Refuse a force push that lands on main."""
-    if _dry_run(call.args):
+    if _dry_run(call.args, PUSH_WITH_ARG):
         return None
     positional: list[str] = []
     skip = False
@@ -181,13 +201,33 @@ def reset_rule(call: GitCall) -> str | None:
     return None
 
 
+def _clean_dry_run(args: list[Word]) -> bool:
+    """Tell whether a `git clean` is a dry run, clusters included.
+
+    In clean only `-e` takes a value, so an `n` before any `e` in a cluster is
+    `-n`, and a cluster ending in `e` takes the next word.
+    """
+    skip = False
+    for a in args:
+        value = a.value
+        if skip:
+            skip = False
+        elif value == "--":
+            return False
+        elif value in CLEAN_WITH_ARG:
+            skip = True
+        elif value in {"--dry-run", "-n"} or (
+            _short_flag(value, "n") and "e" not in value.split("n", 1)[0]
+        ):
+            return True
+        elif _short_flag(value, "e") and value.endswith("e"):
+            skip = True
+    return False
+
+
 def clean_rule(call: GitCall) -> str | None:
     """Refuse `git clean -f` unless it is a dry run."""
-    # In clean, only -e takes a value, so an n before any e in a cluster is -n.
-    dry = _dry_run(call.args) or any(
-        _short_flag(a.value, "n") and "e" not in a.value.split("n", 1)[0] for a in call.args
-    )
-    if _has_flag(call.args, "--force", "f") and not dry:
+    if _has_flag(call.args, "--force", "f") and not _clean_dry_run(call.args):
         return "No `git clean -f` from an agent. Ask the user to run it."
     return None
 

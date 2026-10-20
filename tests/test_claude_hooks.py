@@ -184,6 +184,11 @@ class TestGuardGit:
             ("cat <<< 'x'\ngit reset --hard", "reset --hard"),
             ("echo $((1<<2))\ngit clean -fd", "clean -f"),
             ("(( x <<= 1 ))\ngit checkout .", "checkout ."),
+            ("((cd src) && git add -A)", "Stage files by name"),
+            ("echo ((x\ngit reset --hard", "reset --hard"),
+            ("git clean -e -n -f", "clean -f"),
+            ("git clean -f -- -n", "clean -f"),
+            ("git clean -fe -n", "clean -f"),
             ("git branch --merged | grep -v main | xargs git branch -D", "branch -D"),
             ("timeout 60 git push -f origin main", "force push at main"),
             ("git commit -m 'fix: x' --trailer 'Session: claude.ai/code/session_1'", "session"),
@@ -324,6 +329,8 @@ class TestGuardGh:
             ("gh -R o/r pr create --title 'Bad title' --body x", "squash-merge subject"),
             ("gh pr --repo o/r create --title 'Bad title' --body x", "squash-merge subject"),
             ("gh pr create -t'Bad title' --body x", "squash-merge subject"),
+            (f"gh api -X GET -X POST repos/o/r/issues -f body='a {EMDASH} b'", "emdash"),
+            (f"gh pr create --title '{GOOD}' -l --body 'claude.ai/code/session_1'", "session"),
             (
                 f"gh pr create --title '{GOOD}' --body-file - <<'EOF'\n"
                 "see claude.ai/code/session_1\nEOF",

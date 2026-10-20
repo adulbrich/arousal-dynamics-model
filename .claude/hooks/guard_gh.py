@@ -133,7 +133,8 @@ def _command(step: Step) -> tuple[str, str, list[Word]] | None:
 
 def _publishes(group: str, verb: str, args: list[Word]) -> bool:
     if group == "api":
-        if any(m.upper() == "GET" for m in flag_values(args, ("-X", "--method"))):
+        methods = flag_values(args, ("-X", "--method"))
+        if methods and methods[-1].upper() in {"GET", "HEAD"}:  # the last one wins
             return False
         return any(a.value.startswith(API_WRITE_FLAGS) for a in args)
     return (group, verb) in PUBLISHING
@@ -148,7 +149,9 @@ def problems(command: str, cwd: str) -> list[str]:
             continue
         group, verb, args = call
         text = published_text(group, args, step)
-        if hooklib.SESSION_LINK in text:
+        # The session link is the rule that matters most, so it is also looked
+        # for in the whole command, in case a flag was misread as a value.
+        if hooklib.SESSION_LINK in f"{text}\n{step.segment.text}":
             found.append(f"contains a {hooklib.SESSION_LINK} link; never publish one (AGENTS.md)")
         prose = hooklib.load_script(step.cwd, "check_prose")
         commit = hooklib.load_script(step.cwd, "check_commit_message")

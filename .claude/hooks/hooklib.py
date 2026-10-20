@@ -321,19 +321,26 @@ class _Scanner:
                 j += 1
         return len(self.text)
 
-    def arithmetic_end(self, i: int) -> int:
-        """Return the index after the `))` closing arithmetic, where `<<` is a shift."""
+    def arithmetic_end(self, i: int) -> int | None:
+        """Return the index after the `))` closing arithmetic, where `<<` is a shift.
+
+        None when the parentheses do not close as `))`, or a quote or newline
+        comes first: then it is not arithmetic, and the caller scans it as code.
+        """
         depth = 0
         j = i
         while j < len(self.text):
-            if self.text[j] == "(":
+            c = self.text[j]
+            if c in "'\"\n":
+                return None
+            if c == "(":
                 depth += 1
-            elif self.text[j] == ")":
+            elif c == ")":
                 if depth == 0:
-                    return min(j + 2, len(self.text)) if self.text.startswith("))", j) else j + 1
+                    return j + 2 if self.text.startswith("))", j) else None
                 depth -= 1
             j += 1
-        return len(self.text)
+        return None
 
     def operator(self, i: int) -> int:
         """Record the heredoc whose `<<` is at `i`; return where its line continues."""
@@ -401,8 +408,10 @@ class _Scanner:
                 i = end
             elif self.text.startswith("<<<", i):
                 i += 3  # a here-string, not a heredoc
-            elif self.text.startswith(("$((", "(("), i):
-                i = self.arithmetic_end(i + (3 if c == "$" else 2))
+            elif self.text.startswith(("$((", "(("), i) and (
+                end := self.arithmetic_end(i + (3 if c == "$" else 2))
+            ):
+                i = end
             elif self.text.startswith("<<", i):
                 i = self.operator(i)
             elif c == "\n" and self.pending:
