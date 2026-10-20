@@ -128,6 +128,8 @@ class TestGuardGit:
             "git push --dry-run --force origin main --verbose",
             "git commit -m 'fix: rename `foo` to bar'",
             "git merge --ff-only origin/main",
+            "nice -n 5 git status",
+            "xargs -n 1 echo < files.txt",
         ],
     )
     def test_allowed(self, feature: Path, command: str) -> None:
@@ -183,6 +185,10 @@ class TestGuardGit:
             ("if true; then git add -A; fi", "Stage files by name"),
             ("! git add -A", "Stage files by name"),
             ("env -i git add -A", "Stage files by name"),
+            ("sudo -E git add -A", "Stage files by name"),
+            ("sudo -n git add -A", "Stage files by name"),
+            ("sudo -u alex git add -A", "Stage files by name"),
+            ('echo "$((1 << 3))"\ngit add -A', "Stage files by name"),
             ("cat <<< 'x'\ngit reset --hard", "reset --hard"),
             ("echo $((1<<2))\ngit clean -fd", "clean -f"),
             ("(( x <<= 1 ))\ngit checkout .", "checkout ."),
@@ -259,6 +265,12 @@ class TestGuardGit:
         ["git merge --abort", "git cherry-pick --no-commit abc", "git revert -n HEAD"],
     )
     def test_their_no_commit_forms_are_fine(self, on_main: Path, command: str) -> None:
+        assert guard_git.refusal(command, str(on_main)) is None
+
+    @pytest.mark.parametrize(
+        "command", ["git merge --squash feat/x", "git merge origin/main", "git merge @{u}"]
+    )
+    def test_merges_that_record_nothing_on_main(self, on_main: Path, command: str) -> None:
         assert guard_git.refusal(command, str(on_main)) is None
 
     def test_a_new_branch_covers_the_whole_checkout(self, on_main: Path) -> None:
@@ -339,6 +351,12 @@ class TestGuardGh:
             ("gh pr create -t'Bad title' --body x", "squash-merge subject"),
             (f"gh api -X GET -X POST repos/o/r/issues -f body='a {EMDASH} b'", "emdash"),
             (f"gh pr create --title '{GOOD}' -l --body 'claude.ai/code/session_1'", "session"),
+            (f"gh pr review 12 --comment --body 'a {EMDASH} b'", "emdash"),
+            (f"gh pr review 12 -c -b 'a {EMDASH} b'", "emdash"),
+            (f"gh pr review 12 -r -b 'a {EMDASH} b'", "emdash"),
+            (f"gh release create v1 -p --notes 'a {EMDASH} b'", "emdash"),
+            ("gh pr merge 12 -m --subject 'Bad subject' --body x", "squash-merge subject"),
+            (f"gh pr create -f --body 'a {EMDASH} b'", "emdash"),
             (
                 f"gh pr create --title '{GOOD}' --body-file - <<'EOF'\n"
                 "see claude.ai/code/session_1\nEOF",

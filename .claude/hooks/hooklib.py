@@ -312,6 +312,8 @@ class _Scanner:
                 j += 2
             elif c == '"':
                 return j + 1
+            elif self.text.startswith("$((", j) and (end := self.arithmetic_end(j + 3)):
+                j = end
             elif self.text.startswith("$(", j):
                 j = self.walk(j + 2, nested=True)
             elif c == "`":
@@ -515,11 +517,18 @@ class Word(NamedTuple):
 # Words that start a command line without being the command, and wrappers
 # whose own options come before the command they run.
 _KEYWORDS = frozenset({"!", "{", "then", "do", "else", "elif", "if", "while", "until", "time"})
-_WRAPPERS = frozenset({"sudo", "env", "command", "exec", "nohup", "nice", "timeout", "xargs"})
-_WRAPPER_WITH_ARG = frozenset(
-    {"-u", "-g", "-C", "-S", "--unset", "--chdir", "-n", "-I", "-L", "-P", "-d", "-E", "-s"}
-    | {"-a", "-k", "--signal", "--kill-after"}
-)
+# Each wrapper, with the options of its own that take a value. The sets are
+# per wrapper on purpose: `-n` takes a value in xargs and nice, not in sudo.
+_WRAPPERS: dict[str, frozenset[str]] = {
+    "sudo": frozenset({"-u", "-g", "-C", "-D", "-h", "-p", "-r", "-t", "-U"}),
+    "env": frozenset({"-u", "--unset", "-C", "--chdir", "-S", "--split-string"}),
+    "command": frozenset(),
+    "exec": frozenset({"-a"}),
+    "nohup": frozenset(),
+    "nice": frozenset({"-n", "--adjustment"}),
+    "timeout": frozenset({"-s", "--signal", "-k", "--kill-after"}),
+    "xargs": frozenset({"-n", "-I", "-L", "-P", "-d", "-E", "-s", "-a"}),
+}
 # Wrappers whose first plain argument is theirs, not the command's.
 _WRAPPER_FIRST_ARG = frozenset({"timeout"})
 ASSIGNMENT = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*=")
@@ -539,7 +548,7 @@ def words(segment: Segment) -> list[Word]:
         elif word in _WRAPPERS:
             i += 1
             while i < len(found) and found[i].masked.startswith("-"):
-                i += 2 if found[i].masked in _WRAPPER_WITH_ARG else 1
+                i += 2 if found[i].masked in _WRAPPERS[word] else 1
             if word in _WRAPPER_FIRST_ARG:
                 i += 1  # timeout's duration
         else:

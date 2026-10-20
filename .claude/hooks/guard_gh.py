@@ -55,14 +55,18 @@ API_WRITE_FLAGS = (*API_FIELD_FLAGS, "--input")
 # Flags whose value is published text, for pr, issue and release.
 TEXT_FLAGS = ("-t", "--title", "-b", "--body", "--subject", "-c", "--comment", "-n", "--notes")
 REPO_FLAGS = frozenset({"-R", "--repo"})
-# gh flags that take a value, so the word after one is a value, never a flag.
+# gh flags that take a value in every command that has them, so the word after
+# one is that value. Flags that are switches in some commands (`-c`, `-r`,
+# `-a`, `-m`, `-p`, `-f` in `pr review`, `pr merge`, `pr create`, `release`)
+# are left out, and a following word that is itself a known flag is never
+# taken as a value (`flag_values`).
 VALUE_FLAGS = frozenset(
-    {"-t", "--title", "-b", "--body", "-F", "--body-file", "--subject", "-c", "--comment"}
-    | {"-n", "--notes", "--notes-file", "-l", "--label", "-a", "--assignee", "-r", "--reviewer"}
-    | {"-B", "--base", "-H", "--head", "-m", "--milestone", "-p", "--project", "-T"}
-    | {"--template", "-f", "--field", "--raw-field", "--input", "-X", "--method", "-q"}
-    | {"--jq", "--header", "--target", "--repo", "-R"}
+    {"-t", "--title", "-b", "--body", "-F", "--body-file", "--subject", "--notes"}
+    | {"--notes-file", "-l", "--label", "--assignee", "--reviewer", "-B", "--base", "-H"}
+    | {"--head", "--milestone", "--project", "-T", "--template", "--field", "--raw-field"}
+    | {"--input", "-X", "--method", "-q", "--jq", "--header", "--target", "--repo", "-R"}
 )
+KNOWN_FLAGS = VALUE_FLAGS | frozenset(TEXT_FLAGS) | frozenset(API_FIELD_FLAGS)
 
 
 def flag_values(args: list[Word], names: tuple[str, ...]) -> list[str]:
@@ -87,7 +91,8 @@ def flag_values(args: list[Word], names: tuple[str, ...]) -> list[str]:
                     and len(value) > len(name)
                 ):
                     out.append(value[len(name) :])
-        i += 2 if value in VALUE_FLAGS else 1
+        following = args[i + 1].value if i + 1 < len(args) else ""
+        i += 2 if value in VALUE_FLAGS and following not in KNOWN_FLAGS else 1
     return out
 
 

@@ -306,16 +306,23 @@ def _switches_to_new_branch(call: GitCall) -> bool:
 # under which they do not.
 RECORDS_COMMIT = {
     "commit": frozenset({"--dry-run"}),
-    "merge": frozenset({"--ff-only", "--abort", "--quit"}),
+    "merge": frozenset({"--ff-only", "--squash", "--abort", "--quit"}),
     "cherry-pick": frozenset({"-n", "--no-commit", "--abort", "--quit", "--skip"}),
     "revert": frozenset({"-n", "--no-commit", "--abort", "--quit", "--skip"}),
     "am": frozenset({"--abort", "--quit", "--skip", "--show-current-patch"}),
 }
 
 
+# Updating main from its upstream fast-forwards when main carries no commits
+# of its own, which the never-commit-on-main rule guarantees.
+UPSTREAM_REFS = frozenset({"origin/main", "@{u}", "@{upstream}", "FETCH_HEAD"})
+
+
 def _records_commit(call: GitCall) -> bool:
     exempt = RECORDS_COMMIT.get(call.sub)
-    return exempt is not None and not any(a.value in exempt for a in call.args)
+    if exempt is None or any(a.value in exempt for a in call.args):
+        return False
+    return not (call.sub == "merge" and any(a.value in UPSTREAM_REFS for a in call.args))
 
 
 class Taken(NamedTuple):
