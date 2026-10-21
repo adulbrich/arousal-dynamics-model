@@ -159,4 +159,9 @@ with the papers ([issue #7][audit]), the model landscape and a future daytime mo
 engineering work such as an entrainment helper and an event-aware solver. The pull request
 that finishes an item closes its issue.
 
+## License
+
+Copyright 2021-2026 Alexander Ulbrich and Clotilde Pierson. Licensed under the Apache License,
+Version 2.0; see [LICENSE](LICENSE).
+
 [issues]: https://github.com/adulbrich/arousal-dynamics-model/issues
