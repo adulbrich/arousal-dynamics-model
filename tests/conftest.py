@@ -31,6 +31,19 @@ HOUR = 3600.0
 DAY = 24 * HOUR
 
 
+@pytest.fixture(autouse=True)
+def _no_inherited_git_environment(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Keep every test's git commands on the repository the test names.
+
+    The pre-push hook runs this suite, and from a linked worktree git exports
+    GIT_DIR to it. Inherited, that sends the hook tests' `git init`, `commit`
+    and `worktree add` to the repository being pushed instead of their
+    temporary ones.
+    """
+    for key in [key for key in os.environ if key.startswith("GIT_")]:
+        monkeypatch.delenv(key)
+
+
 def _office_inputs(days: int) -> Inputs:
     """Dim night (5 lux), bright day (250 lux) 08:00 to 18:00, 30 lux evening to 23:00."""
     hours = np.arange(0.0, (days + 1) * 24.0 + 0.25, 0.25)
