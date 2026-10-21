@@ -57,7 +57,8 @@ run.to_dataframe()  # with the pandas extra
 ```
 
 Parameters are a frozen dataclass holding the papers' values, each with its unit and
-source in the field metadata. Override any of them per run:
+source in the field metadata; the one refit value, S_c, says so in its source. Override
+any of them per run:
 
 ```python
 from dataclasses import replace
@@ -74,7 +75,7 @@ variant = simulate(ArousalModel(), inputs, t, params=replace(ArousalParameters()
 | --- | --- |
 | `arousal_dynamics.models.arousal` | `ArousalModel`, `ArousalParameters`, and every equation as a function citing its paper and equation number |
 | `arousal_dynamics.simulation` | `simulate`, `Trajectory`, and the `Model` interface a second model would implement |
-| `arousal_dynamics.inputs` | `LightInput` (light with units and interpolation), `WakeSchedule`, `Inputs` |
+| `arousal_dynamics.inputs` | `LightInput` (light with units and interpolation), `WakeSchedule`, `Inputs` (`schedule=None` forces no wake) |
 | `arousal_dynamics.units` | Melanopic EDI and melanopic irradiance conversion (CIE S 026) |
 | `arousal_dynamics.plotting` | `plot_light`, `plot_trajectory` (the `plot` extra) |
 
@@ -90,16 +91,24 @@ stays that way for now.
 
 ## Known discrepancies with the papers
 
-The code reproduces the original implementation exactly, including where it departs from
-the papers. The equation audit ([issue #7][audit]) checks every equation and constant
-against the four papers; each discrepancy is an issue of its own, with a recommendation.
+The code began as an exact copy of the original implementation. The equation audit
+([issue #7][audit]) checks every equation and constant against the papers; each
+discrepancy is an issue of its own, with a recommendation. Three fixes follow the authors'
+model where the papers print something else, on the evidence of the papers' own account
+of its behaviour and of the KSS the original authors shared: St Hilaire's photic drive
+([#6][i6]), an alerting term that sees light only while awake ([#14][i14]), and its sigmoid
+normalized and refit ([#11][i11]). `docs/adr/0003-follow-the-authors-model-where-the-print-departs-from-it.md`
+records why, and `tests/test_validation.py` how close the model now comes to that output.
 The two code bugs, the circadian phase ([#8][i8]) and the melatonin suppression form
 ([#9][i9]), are tests marked as expected failures in `tests/test_invariants.py`; each fix
 lands in its own pull request.
 
 [audit]: https://github.com/adulbrich/arousal-dynamics-model/issues/7
+[i6]: https://github.com/adulbrich/arousal-dynamics-model/issues/6
 [i8]: https://github.com/adulbrich/arousal-dynamics-model/issues/8
 [i9]: https://github.com/adulbrich/arousal-dynamics-model/issues/9
+[i11]: https://github.com/adulbrich/arousal-dynamics-model/issues/11
+[i14]: https://github.com/adulbrich/arousal-dynamics-model/issues/14
 
 Two numerical facts worth knowing before comparing against data. From its default initial
 state the model takes about two weeks to entrain to a regular schedule, so start a

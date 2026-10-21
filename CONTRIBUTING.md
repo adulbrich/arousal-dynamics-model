@@ -43,8 +43,9 @@ fix/ feat/ ...     prose, branch, lock,   fast tests         lowest, pr-text;   
 `tests/test_golden.py` pins the model's output: every equation function on an
 input grid, and four three-day trajectories with all states and derived outputs
 (KSS, circadian drive, phase, aMT6s). The arrays in `tests/test_golden/` were
-written by the code as it stood at commit 55eeb3e, known discrepancies with the
-papers included ([issue #7](https://github.com/adulbrich/arousal-dynamics-model/issues/7)).
+first written by the code as it stood at commit 55eeb3e, known discrepancies with the
+papers included ([issue #7](https://github.com/adulbrich/arousal-dynamics-model/issues/7)),
+and each science fix since has regenerated them in a commit of its own.
 
 Two kinds of pull request touch the model, and they never mix:
 
@@ -73,7 +74,7 @@ Python 3.9 in `HOOK_PYTHON`, under which the Claude Code hooks are run end to en
 
 | File | What it pins |
 | --- | --- |
-| `test_golden.py` | Model output against the arrays the legacy code wrote. A refactor must leave it green. |
+| `test_golden.py` | Model output against the pinned arrays, first written by the legacy code. A refactor must leave it green. |
 | `test_equations.py` | Each equation against a value worked out by hand from the paper, and scalar and array calls agreeing exactly. |
 | `test_properties.py` | Hypothesis invariants: bounds, monotonicity, gating, periodicity, unit round trips. |
 | `test_invariants.py` | Physiology over simulated days: sleep at night, pressure building by day, entrainment. Ends with strict expected failures, one per audited code bug. |
