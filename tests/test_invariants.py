@@ -142,7 +142,6 @@ def test_light_during_sleep_does_not_drive_theta_l() -> None:
     )
 
 
-@pytest.mark.xfail(strict=True, reason="issue #11: T20 p. 7 normalizes S to [0, 1]")
 def test_alertness_sigmoid_is_zero_in_darkness() -> None:
     # T20 p. 7: S(E) is "a sigmoid function normalized to the range between 0 and 1".
     assert eq.alertness_sigmoid(0.0, ArousalParameters()) == 0.0

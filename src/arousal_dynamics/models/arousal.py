@@ -191,8 +191,15 @@ def sleep_state(V_m: Value, p: ArousalParameters) -> Value:
 
 
 def alertness_sigmoid(E_mel: Value, p: ArousalParameters) -> Value:
-    """Light-dependent sigmoid in [0, 1] driving Theta_L. T20 Eq 14."""
-    return 1 / (1 + exp((p.s_b - E_mel) / p.s_c))
+    """Light-dependent sigmoid driving Theta_L, normalized to [0, 1]. T20 Eq 14.
+
+    T20 p. 7 calls S "a sigmoid function normalized to the range between 0 and
+    1": the logistic 1 / (1 + exp((S_b - E) / S_c)), less its value in
+    darkness and rescaled, so that S is 0 at E = 0 and tends to 1 in bright
+    light (issue #11). The original code normalized it this way until 4ca72b2.
+    """
+    dark = 1 / (1 + exp(p.s_b / p.s_c))
+    return (1 / (1 + exp((p.s_b - E_mel) / p.s_c)) - dark) / (1 - dark)
 
 
 def kss(C: Value, H: Value, Theta_L: Value, p: ArousalParameters) -> Value:

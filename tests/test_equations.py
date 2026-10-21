@@ -117,12 +117,18 @@ class TestSleepState:
 
 
 class TestAlertness:
-    def test_sigmoid_is_half_at_s_b(self) -> None:
-        # 1 / (1 + exp((S_b - E) / S_c)), T20 Eq 14
-        assert eq.alertness_sigmoid(0.05, P) == pytest.approx(0.5)
+    @staticmethod
+    def _normalized(logistic: float) -> float:
+        # T20 p. 7: the logistic less its value in darkness, rescaled to [0, 1]
+        dark = 1 / (1 + math.exp(0.05 * 223.5))
+        return (logistic - dark) / (1 - dark)
+
+    def test_sigmoid_at_s_b(self) -> None:
+        # 1 / (1 + exp((S_b - E) / S_c)), T20 Eq 14, is 1/2 at E = S_b before normalizing
+        assert eq.alertness_sigmoid(0.05, P) == pytest.approx(self._normalized(0.5))
 
     def test_sigmoid_one_s_c_above(self) -> None:
-        expected = 1 / (1 + math.exp(-1.0))
+        expected = self._normalized(1 / (1 + math.exp(-1.0)))
         assert eq.alertness_sigmoid(0.05 + 1 / 223.5, P) == pytest.approx(expected)
 
     def test_kss(self) -> None:
