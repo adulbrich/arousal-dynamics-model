@@ -276,7 +276,10 @@ class ArousalModel:
 
         IE = inputs.light(t)
         S = sleep_state(V_m, p)
-        sigmoid = alertness_sigmoid(IE, p)
+        # Closed eyes: the alerting term sees light only while awake, as the
+        # photic drive does (P18 Table 1 Eq 14, I = I S). The authors' shared
+        # output starts the alerting response at wake, not at lights-on (issue #14).
+        sigmoid = alertness_sigmoid(IE * S, p)
         alpha = photoreceptor_conversion_rate(IE, S, p)
         Q_m = firing_rate(V_m, p)
         Q_v = firing_rate(V_v, p)

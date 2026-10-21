@@ -129,16 +129,17 @@ def test_entrains_to_sleep_from_2330_to_0800(p18_entrainment: Trajectory) -> Non
     assert np.all((wakes >= 7.75) & (wakes <= 8.25))
 
 
-@pytest.mark.xfail(strict=True, reason="issue #14: Theta_L follows the light through sleep")
 def test_light_during_sleep_does_not_drive_theta_l() -> None:
     # Closed eyes see no light: P18 Table 1 Eq 14 gates it by wake (I = I S). In
     # the authors' shared output (tests/test_validation.py) the alerting response
     # starts at the 08:13 wake, not at the 08:00 light rise.
-    p = ArousalParameters()
+    p, model = ArousalParameters(), ArousalModel()
     asleep = np.array([2.0, -11.7, 13.0, -0.6, -1.0, 0.25, -0.05, 0.0, 10.0])
     bright = Inputs(LightInput.constant(1.0), schedule=None)
-    dtheta = ArousalModel().derivatives(0.0, asleep, p, bright)[6]
-    assert dtheta == pytest.approx(0.05 / p.tau_l)
+    dark = Inputs(LightInput.constant(0.0), schedule=None)
+    assert (
+        model.derivatives(0.0, asleep, p, bright)[6] == model.derivatives(0.0, asleep, p, dark)[6]
+    )
 
 
 @pytest.mark.xfail(strict=True, reason="issue #11: T20 p. 7 normalizes S to [0, 1]")
