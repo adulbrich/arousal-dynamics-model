@@ -79,6 +79,13 @@ variant = simulate(ArousalModel(), inputs, t, params=replace(ArousalParameters()
 `docs/adr/0001-one-model-behind-a-small-interface.md` explains the shape and what is
 left out on purpose.
 
+## Scope
+
+The model was fitted mostly to evening and night-time light and does not tell an office
+day from an outdoor day;
+`docs/adr/0002-keep-the-arousal-model-to-the-light-it-was-fitted-on.md` records why it
+stays that way for now.
+
 ## Known discrepancies with the papers
 
 The code reproduces the original implementation exactly, including where it departs from
