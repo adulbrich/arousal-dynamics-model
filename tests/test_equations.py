@@ -7,7 +7,7 @@ test instead of agreeing with itself.
 
 import math
 from collections.abc import Callable
-from dataclasses import replace
+from dataclasses import fields, replace
 from typing import Any
 
 import numpy as np
@@ -17,6 +17,24 @@ from arousal_dynamics import ArousalModel, ArousalParameters, Inputs, LightInput
 from arousal_dynamics.models import arousal as eq
 
 P = ArousalParameters()
+
+
+class TestParameterSets:
+    """The defaults fit S_c and theta_H; `papers()` prints them; nothing else differs."""
+
+    def test_papers_prints_s_c_and_theta_h(self) -> None:
+        # T20 p. 7: S_c = 223.5 m^2/W, used as 1/223.5 W/m^2 (issue #10); P18 Table 3: 2.28
+        papers = ArousalParameters.papers()
+        assert papers.s_c == 1 / 223.5
+        assert papers.theta_h == 2.28
+
+    def test_defaults_are_the_fit(self) -> None:
+        assert (P.s_c, P.theta_h) == (0.0306, 2.284)
+
+    def test_only_the_fitted_constants_differ(self) -> None:
+        papers = ArousalParameters.papers()
+        differ = {f.name for f in fields(P) if getattr(P, f.name) != getattr(papers, f.name)}
+        assert differ == {"s_c", "theta_h"}
 
 
 class TestFiringRate:

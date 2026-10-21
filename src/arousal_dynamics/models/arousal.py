@@ -36,6 +36,7 @@ class ArousalParameters:
 
     Two defaults are fitted rather than printed: S_c and theta_H, fitted to the
     KSS the original authors shared (`tests/test_validation.py`).
+    `ArousalParameters.papers()` holds the printed values for both.
 
     Override one with `dataclasses.replace(params, s_b=0.3)`. Derived defaults
     (`tau_m`, `tau_x`, `tau_y`, `nu_yy`, `nu_yx`) are fixed numbers, not
@@ -143,6 +144,17 @@ class ArousalParameters:
         2.284, "1/nM", "Fitted to the authors' shared output; P18 Table 3 prints 2.28"
     )
     theta_c: float = _p(-1.74, "1", "P18 Table 3")
+
+    @classmethod
+    def papers(cls) -> "ArousalParameters":
+        """Every constant as the papers print it, S_c and theta_H included.
+
+        The defaults fit those two to the KSS the original authors shared. Here
+        S_c is T20's 223.5 m^2/W, which the authors gave in 2021 as 1/223.5 W/m^2
+        (issue #10), and theta_H is P18 Table 3's 2.28. The equations are the
+        same for both sets, including the fixes for issues #6, #11 and #14.
+        """
+        return cls(s_c=1.0 / 223.5, theta_h=2.28)
 
 
 # Equations. Each keeps the original expression and operation order unless its
@@ -282,7 +294,7 @@ class ArousalModel:
     time_unit = "s"
 
     def default_parameters(self) -> ArousalParameters:
-        """Return the papers' values."""
+        """Return the defaults: the papers' values, S_c and theta_H fitted."""
         return ArousalParameters()
 
     def initial_state(self, params: ArousalParameters) -> FloatArray:  # noqa: ARG002
