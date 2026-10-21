@@ -105,10 +105,16 @@ class ArousalParameters:
 
     # Alertness sigmoid
     s_b: float = _p(0.05, "W/m^2", "T20 p. 7")
+    # Refit, not a paper value. T20 p. 7 prints S_c = 223.5 m^2/W, which the
+    # authors gave in 2021 as 1/223.5 W/m^2 (issue #10). That width reproduces
+    # neither T20's own dose-response (Fig 6) nor the KSS the authors shared
+    # (data/output.csv); 0.0306 W/m^2 is the fit to the shared output with
+    # S_b, nu_LA and tau_L at T20's values (tests/test_validation.py), and
+    # Fig 6 implies a width of the same order (issue #11).
     s_c: float = _p(
-        1.0 / 223.5,
+        0.0306,
         "W/m^2",
-        "T20 p. 7 prints 223.5 m^2/W; inverted for a dimensionless exponent (issue #10)",
+        "Refit to the authors' shared output; T20 p. 7 prints 223.5 m^2/W (issues #10, #11)",
     )
 
     # Melatonin suppression
