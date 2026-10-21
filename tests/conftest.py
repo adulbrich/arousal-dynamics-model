@@ -8,6 +8,7 @@ from hypothesis import settings
 
 from arousal_dynamics import (
     ArousalModel,
+    ArousalParameters,
     Inputs,
     LightInput,
     LightUnit,
@@ -59,3 +60,27 @@ def office_week() -> Trajectory:
 def office_fortnight() -> Trajectory:
     """The `office_week` schedule for 14 days at 15-minute output, for entrainment."""
     return simulate(ArousalModel(), _office_inputs(14), np.arange(0.0, 14 * DAY + 1, 900.0))
+
+
+def p18_entrainment_inputs() -> Inputs:
+    """The entrainment protocol of Postnova et al. 2016 (p. 500) and 2018 (p. 204).
+
+    250 lux from 08:00 to 20:00 and 40 lux otherwise, photopic lux of a 4100 K
+    fluorescent lamp, converted to melanopic irradiance with F_4100K (Tekieh et
+    al. 2020, Eq 7). The papers set 0 lux during sleep; the model already gates
+    light by the sleep state, so the input need not. No forced wake: sleep comes
+    and goes on its own.
+    """
+    f_4100k = ArousalParameters().f_4100k
+
+    def irradiance(t: np.ndarray) -> np.ndarray:
+        clock = np.asarray(t, dtype=float) / HOUR % 24
+        return np.where((clock >= 8) & (clock < 20), 250.0, 40.0) * f_4100k
+
+    return Inputs(LightInput.from_function(irradiance, vectorized=True), schedule=None)
+
+
+@pytest.fixture(scope="session")
+def p18_entrainment() -> Trajectory:
+    """60 days on the P16 and P18 entrainment protocol from the default state, 10-minute output."""
+    return simulate(ArousalModel(), p18_entrainment_inputs(), np.arange(0.0, 60 * DAY + 1, 600.0))

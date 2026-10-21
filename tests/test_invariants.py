@@ -9,7 +9,7 @@ into ordinary tests; strict mode makes an unexpected pass fail the suite.
 import numpy as np
 import pytest
 
-from arousal_dynamics import ArousalParameters, Trajectory
+from arousal_dynamics import ArousalModel, ArousalParameters, Inputs, LightInput, Trajectory
 from arousal_dynamics.models import arousal as eq
 
 DAY = 86400.0
@@ -112,3 +112,36 @@ def test_melatonin_is_synthesized_for_one_long_window_each_night(office_week: Tr
 @pytest.mark.xfail(strict=True, reason="issue #9: logistic form gives r = 0.509 in darkness")
 def test_darkness_does_not_suppress_melatonin() -> None:
     assert eq.melatonin_suppression(0.0, ArousalParameters()) == pytest.approx(1.0)
+
+
+@pytest.mark.slow
+@pytest.mark.xfail(strict=True, reason="issue #6: the printed photic form sleeps 22:30 to 07:00")
+def test_entrains_to_sleep_from_2330_to_0800(p18_entrainment: Trajectory) -> None:
+    # On their 250/40/0 lux protocol the papers' model sleeps between 23:30 and
+    # 08:00 (P18 p. 204, T20 p. 7), from about 23:30 for about 8.5 h (P16 p. 500).
+    S, clock = p18_entrainment["S"], p18_entrainment.t_hours % 24
+    last_week = p18_entrainment.t >= p18_entrainment.t[-1] - 7 * DAY
+    flips = np.flatnonzero(np.diff(S) != 0) + 1
+    flips = flips[last_week[flips]]
+    onsets, wakes = clock[flips][S[flips] == 0], clock[flips][S[flips] == 1]
+    assert onsets.size == wakes.size == 7
+    assert np.all((onsets >= 23.25) & (onsets <= 23.75))
+    assert np.all((wakes >= 7.75) & (wakes <= 8.25))
+
+
+@pytest.mark.xfail(strict=True, reason="issue #14: Theta_L follows the light through sleep")
+def test_light_during_sleep_does_not_drive_theta_l() -> None:
+    # Closed eyes see no light: P18 Table 1 Eq 14 gates it by wake (I = I S). In
+    # the authors' shared output (tests/test_validation.py) the alerting response
+    # starts at the 08:13 wake, not at the 08:00 light rise.
+    p = ArousalParameters()
+    asleep = np.array([2.0, -11.7, 13.0, -0.6, -1.0, 0.25, -0.05, 0.0, 10.0])
+    bright = Inputs(LightInput.constant(1.0), schedule=None)
+    dtheta = ArousalModel().derivatives(0.0, asleep, p, bright)[6]
+    assert dtheta == pytest.approx(0.05 / p.tau_l)
+
+
+@pytest.mark.xfail(strict=True, reason="issue #11: T20 p. 7 normalizes S to [0, 1]")
+def test_alertness_sigmoid_is_zero_in_darkness() -> None:
+    # T20 p. 7: S(E) is "a sigmoid function normalized to the range between 0 and 1".
+    assert eq.alertness_sigmoid(0.0, ArousalParameters()) == 0.0
