@@ -161,7 +161,7 @@ that finishes an item closes its issue.
 
 ## License
 
-Copyright 2021-2026 Alexander Ulbrich and contributors. Licensed under the Apache License,
+Copyright 2021-2026 Alexander Ulbrich and Clotilde Pierson. Licensed under the Apache License,
 Version 2.0; see [LICENSE](LICENSE).
 
 [issues]: https://github.com/adulbrich/arousal-dynamics-model/issues
