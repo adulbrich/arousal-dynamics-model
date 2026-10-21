@@ -22,6 +22,6 @@ Closes #
 
 ## Docs
 
-<!-- README, CONTRIBUTING, AGENTS, an ADR, the equation audit, or "none, because ...". -->
+<!-- README, CONTRIBUTING, AGENTS, an ADR, or "none, because ...". -->
 
 -

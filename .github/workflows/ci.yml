@@ -63,7 +63,9 @@ jobs:
           python-version: ${{ matrix.python }}
           enable-cache: true
       - run: uv sync --locked
-      - run: uv run pytest
+      - run: uv run pytest --cov
+        env:
+          HYPOTHESIS_PROFILE: ci
 
   # The oldest dependency versions pyproject.toml admits. A floor that is
   # declared but never run is a guess.

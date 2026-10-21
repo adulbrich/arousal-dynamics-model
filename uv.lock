@@ -90,17 +90,28 @@ wheels = [
 [[package]]
 name = "arousal-dynamics"
 version = "0.1.0"
-source = { virtual = "." }
+source = { editable = "." }
 dependencies = [
-    { name = "matplotlib" },
     { name = "numpy" },
     { name = "scipy" },
 ]
 
+[package.optional-dependencies]
+pandas = [
+    { name = "pandas" },
+]
+plot = [
+    { name = "matplotlib" },
+]
+
 [package.dev-dependencies]
 dev = [
+    { name = "arousal-dynamics", extra = ["pandas", "plot"] },
     { name = "hypothesis" },
+    { name = "ipykernel" },
     { name = "lefthook" },
+    { name = "nbclient" },
+    { name = "nbformat" },
     { name = "pytest" },
     { name = "pytest-cov" },
     { name = "pytest-regressions" },
@@ -108,33 +119,33 @@ dev = [
     { name = "ty" },
 ]
 notebooks = [
-    { name = "ipykernel" },
     { name = "jupyterlab" },
-    { name = "pandas" },
 ]
 
 [package.metadata]
 requires-dist = [
-    { name = "matplotlib", specifier = ">=3.10.8" },
+    { name = "matplotlib", marker = "extra == 'plot'", specifier = ">=3.10.8" },
     { name = "numpy", specifier = ">=2.0" },
+    { name = "pandas", marker = "extra == 'pandas'", specifier = ">=2.2" },
     { name = "scipy", specifier = ">=1.13" },
 ]
+provides-extras = ["plot", "pandas"]
 
 [package.metadata.requires-dev]
 dev = [
+    { name = "arousal-dynamics", extras = ["pandas", "plot"] },
     { name = "hypothesis", specifier = ">=6.170.2" },
+    { name = "ipykernel", specifier = ">=7" },
     { name = "lefthook", specifier = "==2.2.2" },
+    { name = "nbclient", specifier = ">=0.10" },
+    { name = "nbformat", specifier = ">=5.10" },
     { name = "pytest", specifier = ">=9.1" },
     { name = "pytest-cov", specifier = ">=7.1" },
     { name = "pytest-regressions", specifier = ">=2.11" },
     { name = "ruff", specifier = "==0.17.1" },
     { name = "ty", specifier = "==0.0.89" },
 ]
-notebooks = [
-    { name = "ipykernel", specifier = ">=7" },
-    { name = "jupyterlab", specifier = ">=4" },
-    { name = "pandas", specifier = ">=2.2" },
-]
+notebooks = [{ name = "jupyterlab", specifier = ">=4" }]
 
 [[package]]
 name = "arrow"
