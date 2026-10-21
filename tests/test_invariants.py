@@ -75,10 +75,10 @@ def _rising_crossings_h(run: Trajectory) -> np.ndarray:
 
 @pytest.mark.slow
 def test_circadian_rhythm_entrains_to_the_day(office_fortnight: Trajectory) -> None:
-    # From the default initial state the oscillator takes weeks to entrain: the
-    # first period is 23.4 h, and each later one closes part of the gap to the
-    # 24 h day. Measured when written: 23.37 h on day one, 23.98 h on day 14,
-    # 24.00 h by day 25.
+    # From the default initial state the oscillator takes about two weeks to
+    # entrain: the first period is 23.3 h, and each later one closes part of the
+    # gap to the 24 h day. Measured with St Hilaire's photic drive (issue #6):
+    # 23.31 h on day one, 23.99 h on day 11, 24.00 h by day 13.
     periods_h = np.diff(_rising_crossings_h(office_fortnight))
     assert periods_h.size >= 12
     assert np.all(np.diff(periods_h) > 0)
