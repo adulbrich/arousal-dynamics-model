@@ -13,7 +13,7 @@ from typing import Any
 import numpy as np
 import pytest
 
-from arousal_dynamics import ArousalParameters, WakeSchedule
+from arousal_dynamics import ArousalModel, ArousalParameters, Inputs, LightInput, WakeSchedule
 from arousal_dynamics.models import arousal as eq
 
 P = ArousalParameters()
@@ -171,6 +171,16 @@ class TestForcedWake:
     def test_unsupported_windows_are_rejected(self, wake: float, bed: float) -> None:
         with pytest.raises(ValueError, match="waketime"):
             WakeSchedule(waketime=wake, bedtime=bed)
+
+    def test_no_schedule_never_forces_wake(self) -> None:
+        # Asleep: VLPO active, MA quiet. A window would push V_m up; no window leaves W = 0.
+        y = np.array([2.0, -11.7, 13.0, -0.6, -1.0, 0.25, 0.0, 0.0, 10.0])
+        model, light, noon = ArousalModel(), LightInput.constant(0.0), 12 * 3600.0
+        free = model.derivatives(noon, y, P, Inputs(light, schedule=None))
+        forced = model.derivatives(noon, y, P, Inputs(light, WakeSchedule(0, 24)))
+        unforced = (P.nu_mv * eq.firing_rate(2.0, P) + 11.7 + P.d_m) / P.tau_m
+        assert free[1] == pytest.approx(unforced)
+        assert forced[1] > free[1]
 
 
 SCALAR_AND_ARRAY_CASES = [

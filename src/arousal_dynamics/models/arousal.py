@@ -272,7 +272,7 @@ class ArousalModel:
         D_v = total_sleep_drive(H, C, p)
         D_n = nonphotic_drive(X, S, p)
         D_p = photic_drive(X, Y, P, alpha, p)
-        F_w = inputs.schedule.forced_wake(t)
+        F_w = 0 if inputs.schedule is None else inputs.schedule.forced_wake(t)
         W = wake_effort(Q_v, F_w, p)
         r = melatonin_suppression(IE, p)
         phi = circadian_phase(X, Y)

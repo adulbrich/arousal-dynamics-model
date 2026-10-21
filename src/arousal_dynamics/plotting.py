@@ -23,7 +23,7 @@ def plot_light(trajectory: Trajectory, schedule: WakeSchedule | None = None) -> 
     """Plot the light the model saw, with the forced-wake window marked each day.
 
     This is the plot the original `model_run(debug=True)` drew before
-    integrating.
+    integrating. A run without a forced-wake window gets no window marks.
     """
     plt = _pyplot()
     schedule = schedule if schedule is not None else trajectory.inputs.schedule
@@ -41,6 +41,8 @@ def plot_light(trajectory: Trajectory, schedule: WakeSchedule | None = None) -> 
         offset = 24 * day
         if day:
             ax.axvline(offset, color="r", linestyle="--", alpha=0.3)
+        if schedule is None:
+            continue
         ax.axvline(
             offset + schedule.waketime,
             color="g",
@@ -53,7 +55,8 @@ def plot_light(trajectory: Trajectory, schedule: WakeSchedule | None = None) -> 
             linestyle=":",
             label="Bed time" if not day else None,
         )
-    ax.legend()
+    if schedule is not None:
+        ax.legend()
     return fig
 
 
