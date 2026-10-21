@@ -20,6 +20,15 @@ Closes #
 
 - `uv run ruff check`, `uv run ty check`, `uv run pytest`
 
+## Review loop
+
+<!-- The review loop in AGENTS.md: each pass count, or why the correctness pass
+     does not apply, and one line per declined finding. -->
+
+- Passes:
+- Correctness passes:
+- Declined:
+
 ## Docs
 
 <!-- README, CONTRIBUTING, AGENTS, an ADR, or "none, because ...". -->
