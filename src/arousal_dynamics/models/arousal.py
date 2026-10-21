@@ -34,6 +34,9 @@ def _p(default: float, unit: str, source: str) -> Any:
 class ArousalParameters:
     """Every constant of the model, with the papers' values as defaults.
 
+    Two defaults are fitted rather than printed: S_c and theta_H, fitted to the
+    KSS the original authors shared (`tests/test_validation.py`).
+
     Override one with `dataclasses.replace(params, s_b=0.3)`. Derived defaults
     (`tau_m`, `tau_x`, `tau_y`, `nu_yy`, `nu_yx`) are fixed numbers, not
     formulas: overriding `nu_xp` does not move `nu_yy`.
@@ -105,16 +108,17 @@ class ArousalParameters:
 
     # Alertness sigmoid
     s_b: float = _p(0.05, "W/m^2", "T20 p. 7")
-    # Refit, not a paper value. T20 p. 7 prints S_c = 223.5 m^2/W, which the
+    # Fitted, not a paper value. T20 p. 7 prints S_c = 223.5 m^2/W, which the
     # authors gave in 2021 as 1/223.5 W/m^2 (issue #10). That width reproduces
     # neither T20's own dose-response (Fig 6) nor the KSS the authors shared
-    # (data/output.csv); 0.0306 W/m^2 is the fit to the shared output with
-    # S_b, nu_LA and tau_L at T20's values (tests/test_validation.py), and
-    # Fig 6 implies a width of the same order (issue #11).
+    # (data/output.csv); 0.0306 W/m^2 is the fit to the shared output, jointly
+    # with theta_H, with S_b, nu_LA and tau_L at T20's values
+    # (tests/test_validation.py). Fig 6 implies a width of the same order
+    # (issue #11).
     s_c: float = _p(
         0.0306,
         "W/m^2",
-        "Refit to the authors' shared output; T20 p. 7 prints 223.5 m^2/W (issues #10, #11)",
+        "Fitted to the authors' shared output; T20 p. 7 prints 223.5 m^2/W (issues #10, #11)",
     )
 
     # Melatonin suppression
@@ -132,7 +136,12 @@ class ArousalParameters:
 
     # KSS
     theta_0: float = _p(-24.34, "1", "P18 Table 3")
-    theta_h: float = _p(2.28, "1/nM", "P18 Table 3")
+    # Fitted, not the printed value. P18 Table 3 prints 2.28, and 2.284 rounds
+    # to it. Fitted jointly with S_c, it removes a constant 0.05 point offset
+    # against the KSS the authors shared (tests/test_validation.py).
+    theta_h: float = _p(
+        2.284, "1/nM", "Fitted to the authors' shared output; P18 Table 3 prints 2.28"
+    )
     theta_c: float = _p(-1.74, "1", "P18 Table 3")
 
 

@@ -136,7 +136,8 @@ class TestAlertness:
 
     def test_kss(self) -> None:
         # Theta_0 + (Theta_H + Theta_L) H + Theta_C C, T20 Eq 12
-        expected = -24.34 + (2.28 - 0.11) * 13.0 + (-1.74) * 0.5
+        # theta_H = 2.284 is fitted; P18 Table 3 prints 2.28.
+        expected = -24.34 + (2.284 - 0.11) * 13.0 + (-1.74) * 0.5
         assert eq.kss(0.5, 13.0, -0.11, P) == pytest.approx(expected)
 
 
