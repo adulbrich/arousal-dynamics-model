@@ -11,6 +11,8 @@ Sleepiness Scale (KSS). Equations and parameters come from:
 
 [Postnova et al. 2018] Postnova, S., Lockley, S. W., & Robinson, P. A. (2018). Prediction of Cognitive Performance and Subjective Sleepiness Using a Model of Arousal Dynamics. _Journal of Biological Rhythms_, _33_(2), 203–218. https://doi.org/10.1177/0748730418758454
 
+[St Hilaire et al. 2007] St Hilaire, M. A., Klerman, E. B., Khalsa, S. B., Wright, K. P., Czeisler, C. A., & Kronauer, R. E. (2007). Addition of a non-photic component to a light-based mathematical model of the human circadian pacemaker. _Journal of Theoretical Biology_, _247_(4), 583–599. https://doi.org/10.1016/j.jtbi.2007.04.001
+
 [Tekieh et al. 2020] Tekieh, T., Lockley, S. W., Robinson, P. A., McCloskey, S., Zobaer, M. S., & Postnova, S. (2020). Modeling melanopsin‐mediated effects of light on circadian phase, melatonin suppression, and subjective sleepiness. _Journal of Pineal Research_, _69_(3), e12681. https://doi.org/10.1111/jpi.12681
 
 Project led by Clotilde Pierson. Implementation by Alexander Ulbrich.

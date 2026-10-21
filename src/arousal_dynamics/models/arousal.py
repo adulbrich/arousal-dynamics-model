@@ -7,9 +7,10 @@ Tekieh et al. 2020 ([T20]). Citations are in the README.
 
 Every equation is a function of state values and an `ArousalParameters`, works
 on scalars and arrays alike, and names its source. Known discrepancies with the
-papers are GitHub issues, indexed in issue #7 and cited below by number; this
-module reproduces the original code exactly, and each fix lands on its own so
-its effect on the golden outputs is visible.
+papers are GitHub issues, indexed in issue #7 and cited below by number. The
+module began as an exact copy of the original code; an equation that departs
+from it says so and cites its issue, and each fix lands on its own so its
+effect on the golden outputs is visible.
 """
 
 from dataclasses import dataclass, field
@@ -87,8 +88,8 @@ class ArousalParameters:
 
     # Photic drive
     epsilon: float = _p(0.4, "1", "P18 Table 1")
-    i_0: float = _p(100, "lx", "P18 Table 1")
-    i_1: float = _p(9500, "lx", "P18 Table 1")
+    i_0: float = _p(100, "lx", "P18 Table 1; the saturation constant of SH07 Eq 9 (issue #6)")
+    i_1: float = _p(9500, "lx", "P18 Table 1; the power-law constant of SH07 Eq 1 (issue #6)")
     alpha_0: float = _p(0.1 / 60.0, "1/s", "P18 Table 1")
     f_4100k: float = _p(8.19e-4, "W/m^2/lx", "T20 Eq 7")
     photic_version: Literal["2018", "2020"] = field(
@@ -129,8 +130,8 @@ class ArousalParameters:
     theta_c: float = _p(-1.74, "1", "P18 Table 3")
 
 
-# Equations. Each reproduces the original expression and operation order, so
-# that results are bitwise identical to the code the golden tests pin.
+# Equations. Each keeps the original expression and operation order unless its
+# docstring cites a fix, so the golden tests pin results bitwise.
 
 
 def wake_effort(Q_v: Value, forced: Value, p: ArousalParameters) -> Value:
@@ -151,14 +152,25 @@ def nonphotic_drive(X: Value, S: Value, p: ArousalParameters) -> Value:
 def photoreceptor_conversion_rate(IE: Value, S: Value, p: ArousalParameters) -> Value:
     """Photoreceptor activation rate alpha, gated by wake.
 
-    `p.photic_version` picks the form: "2018" takes photopic illuminance in lux
-    (P18 Table 1 Eq 13), "2020" melanopic irradiance in W/m^2 (T20 Eq 7).
+    alpha = alpha_0 (I / I_1)^(1/2) I / (I + I_0), St Hilaire et al. 2007
+    ([SH07], J Theor Biol 247:583) Eq 9: the power law of their Eq 1, with
+    I_1 = 9500 lux, times a factor that is linear below I_0 = 100 lux and
+    saturates above it. P18 Table 1 Eq 13 and T20 Eq 6 print I_0 and I_1 the
+    other way round (issue #6). P16 (p. 500) builds the light response on
+    SH07, and only SH07's form gives the entrained sleep from about 23:30 to
+    08:00 that P16 (p. 500), P18 (p. 204) and T20 (p. 7) report for their
+    250/40/0 lux protocol; the printed form sleeps from 22:30 to 07:00.
+
+    `p.photic_version` picks the unit: "2018" takes photopic illuminance in
+    lux, "2020" melanopic irradiance in W/m^2 with I_0 and I_1 scaled by
+    F_4100K (T20 Eq 7).
     """
     IE = IE * S
     if p.photic_version == "2018":
-        return ((p.alpha_0 * IE) / (IE + p.i_1)) * sqrt(IE / p.i_0)
+        return p.alpha_0 * sqrt(IE / p.i_1) * IE / (IE + p.i_0)
     if p.photic_version == "2020":
-        return ((p.alpha_0 * IE) / (IE + p.i_1 * p.f_4100k)) * sqrt(IE / (p.i_0 * p.f_4100k))
+        i_0, i_1 = p.i_0 * p.f_4100k, p.i_1 * p.f_4100k
+        return p.alpha_0 * sqrt(IE / i_1) * IE / (IE + i_0)
     msg = f"photic_version must be '2018' or '2020', got {p.photic_version!r}"
     raise ValueError(msg)
 

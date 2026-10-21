@@ -82,5 +82,5 @@ def p18_entrainment_inputs() -> Inputs:
 
 @pytest.fixture(scope="session")
 def p18_entrainment() -> Trajectory:
-    """60 days on the P16 and P18 entrainment protocol from the default state, 10-minute output."""
-    return simulate(ArousalModel(), p18_entrainment_inputs(), np.arange(0.0, 60 * DAY + 1, 600.0))
+    """60 days on the P16 and P18 entrainment protocol from the default state, 5-minute output."""
+    return simulate(ArousalModel(), p18_entrainment_inputs(), np.arange(0.0, 60 * DAY + 1, 300.0))

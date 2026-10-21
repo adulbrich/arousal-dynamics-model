@@ -115,15 +115,15 @@ def test_darkness_does_not_suppress_melatonin() -> None:
 
 
 @pytest.mark.slow
-@pytest.mark.xfail(strict=True, reason="issue #6: the printed photic form sleeps 22:30 to 07:00")
 def test_entrains_to_sleep_from_2330_to_0800(p18_entrainment: Trajectory) -> None:
     # On their 250/40/0 lux protocol the papers' model sleeps between 23:30 and
     # 08:00 (P18 p. 204, T20 p. 7), from about 23:30 for about 8.5 h (P16 p. 500).
-    S, clock = p18_entrainment["S"], p18_entrainment.t_hours % 24
+    S, hours = p18_entrainment["S"], p18_entrainment.t_hours
     last_week = p18_entrainment.t >= p18_entrainment.t[-1] - 7 * DAY
     flips = np.flatnonzero(np.diff(S) != 0) + 1
     flips = flips[last_week[flips]]
-    onsets, wakes = clock[flips][S[flips] == 0], clock[flips][S[flips] == 1]
+    clock = (hours[flips - 1] + hours[flips]) / 2 % 24  # mid-step, within 2.5 minutes
+    onsets, wakes = clock[S[flips] == 0], clock[S[flips] == 1]
     assert onsets.size == wakes.size == 7
     assert np.all((onsets >= 23.25) & (onsets <= 23.75))
     assert np.all((wakes >= 7.75) & (wakes <= 8.25))

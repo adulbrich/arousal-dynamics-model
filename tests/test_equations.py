@@ -77,18 +77,26 @@ class TestWakeEffort:
 
 class TestPhotoreceptor:
     def test_2018_photopic(self) -> None:
-        # alpha_0 I / (I + I_1) sqrt(I / I_0), P18 Table 1 Eq 13
+        # alpha_0 (I / 9500)^(1/2) I / (I + 100), SH07 Eq 9 (issue #6)
         p = replace(P, photic_version="2018")
         alpha_0 = 0.1 / 60
         for lux in (1.0, 100.0, 1000.0):
-            expected = alpha_0 * lux / (lux + 9500) * math.sqrt(lux / 100)
+            expected = alpha_0 * math.sqrt(lux / 9500) * lux / (lux + 100)
             assert eq.photoreceptor_conversion_rate(lux, 1, p) == pytest.approx(expected)
 
     def test_2020_melanopic(self) -> None:
         # The 2018 form with I_0 and I_1 scaled by F_4100K, T20 Eq 7
         e, f = 0.1, 8.19e-4
-        expected = (0.1 / 60) * e / (e + 9500 * f) * math.sqrt(e / (100 * f))
+        expected = (0.1 / 60) * math.sqrt(e / (9500 * f)) * e / (e + 100 * f)
         assert eq.photoreceptor_conversion_rate(e, 1, P) == pytest.approx(expected)
+
+    def test_grows_as_i_to_the_1_5_in_dim_light(self) -> None:
+        # SH07, text after Eq 9: alpha grows as I^1.5 well below 100 lux.
+        p = replace(P, photic_version="2018")
+        ratio = eq.photoreceptor_conversion_rate(0.02, 1, p) / eq.photoreceptor_conversion_rate(
+            0.01, 1, p
+        )
+        assert ratio == pytest.approx(2**1.5, rel=1e-3)
 
     @pytest.mark.parametrize("version", ["2018", "2020"])
     def test_asleep_sees_no_light(self, version: str) -> None:
