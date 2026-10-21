@@ -23,20 +23,24 @@ The KSS fixes the rest of the protocol:
   Tekieh et al. 2020 (p. 7) start every simulation entrained, with sleep from
   23:30 to 08:00; the run here starts from 60 days on the P18 protocol.
 
-With the model's defaults the KSS error is 0.049 while awake (08:00 to 20:00)
-and 0.056 over the 48 hours. On the same protocol the code before the fixes for
-issues #6, #11 and #14 scored 0.177 and 0.343 (0.285 while awake from its own
-initial state with forced wake from 08:00 to 20:00, this test's protocol until
-then). Two residuals remain:
+The two parameter sets score, as KSS error while awake (08:00 to 20:00) and
+over the 48 hours:
 
-- An offset: the model reads 0.05 point lower throughout, awake and asleep.
-  theta_H = 2.284 instead of the 2.28 of P18 Table 3, a value that rounds to
-  the printed one, removes it (0.015 while awake, 0.019 over 48 hours). The
-  default stays as printed.
-- The first wake. From the P18 start the model wakes at 08:10, 2.8 minutes
-  before the file, which makes the largest single error, 0.20 point for those
-  minutes. Its sleep onsets and second wake fall within 0.7 minutes of the
-  file's.
+- The defaults, with S_c = 0.0306 W/m^2 and theta_H = 2.284 fitted to this
+  file: 0.015 and 0.019.
+- `ArousalParameters.papers()`, with the printed S_c = 1/223.5 W/m^2 and
+  theta_H = 2.28: 0.112 and 0.120. Its alerting term is a switch between
+  about 25 and 55 lux, so KSS reads up to 0.48 too low in the 42 to 72 lux
+  of the day 1 morning and 0.25 too high in the 27 lux evenings.
+
+On the same protocol, the code before the fixes for issues #6, #11 and #14
+scored 0.177 and 0.343. With its own initial state and forced wake from 08:00
+to 20:00, the test's protocol until then, it scored 0.285 while awake.
+
+What the fit leaves is the first wake. From the P18 start the model wakes at
+08:10, 2.8 minutes before the file, which makes the largest single error: 0.15
+point for those minutes. Its sleep onsets and second wake fall within 0.7
+minutes of the file's.
 
 The limits guard against a change making the agreement worse; a science fix
 that improves it should tighten them in the same pull request.
@@ -49,6 +53,7 @@ import pytest
 
 from arousal_dynamics import (
     ArousalModel,
+    ArousalParameters,
     Inputs,
     LightInput,
     LightUnit,
@@ -57,8 +62,9 @@ from arousal_dynamics import (
 )
 
 REFERENCE = Path(__file__).parents[1] / "data" / "output.csv"
-AWAKE_RMSE_LIMIT = 0.06
-RMSE_LIMIT = 0.07
+# (RMSE limit while awake, RMSE limit over 48 hours) for each parameter set
+LIMITS = {"defaults": (0.02, 0.025), "papers": (0.13, 0.14)}
+PARAMETER_SETS = {"defaults": ArousalParameters(), "papers": ArousalParameters.papers()}
 
 pytestmark = [
     pytest.mark.validation,
@@ -80,15 +86,20 @@ def reference() -> tuple[np.ndarray, np.ndarray, np.ndarray]:
     return _read_reference()
 
 
-@pytest.fixture(scope="module")
+@pytest.fixture(scope="module", params=sorted(PARAMETER_SETS))
 def run(
-    reference: tuple[np.ndarray, np.ndarray, np.ndarray], p18_entrainment: Trajectory
-) -> Trajectory:
+    request: pytest.FixtureRequest,
+    reference: tuple[np.ndarray, np.ndarray, np.ndarray],
+    p18_entrainment: Trajectory,
+) -> tuple[str, Trajectory]:
     t, lux, _ = reference
     start = p18_entrainment.states[-1].copy()
     start[ArousalModel.state_names.index("Theta_L")] = 0.0
     light = LightInput.from_samples(t, lux, unit=LightUnit.MELANOPIC_EDI, interpolation="previous")
-    return simulate(ArousalModel(), Inputs(light, schedule=None), t, y0=start)
+    params = PARAMETER_SETS[request.param]
+    return request.param, simulate(
+        ArousalModel(), Inputs(light, schedule=None), t, params=params, y0=start
+    )
 
 
 def _rmse(error: np.ndarray) -> float:
@@ -96,16 +107,18 @@ def _rmse(error: np.ndarray) -> float:
 
 
 def test_kss_tracks_the_reference_while_awake(
-    reference: tuple[np.ndarray, np.ndarray, np.ndarray], run: Trajectory
+    reference: tuple[np.ndarray, np.ndarray, np.ndarray], run: tuple[str, Trajectory]
 ) -> None:
     t, _, kss = reference
+    name, trajectory = run
     clock = t / 3600 % 24
     awake = (clock >= 8) & (clock <= 20)
-    assert _rmse(run["KSS"][awake] - kss[awake]) <= AWAKE_RMSE_LIMIT
+    assert _rmse(trajectory["KSS"][awake] - kss[awake]) <= LIMITS[name][0]
 
 
 def test_kss_tracks_the_reference_over_48_hours(
-    reference: tuple[np.ndarray, np.ndarray, np.ndarray], run: Trajectory
+    reference: tuple[np.ndarray, np.ndarray, np.ndarray], run: tuple[str, Trajectory]
 ) -> None:
     _, _, kss = reference
-    assert _rmse(run["KSS"] - kss) <= RMSE_LIMIT
+    name, trajectory = run
+    assert _rmse(trajectory["KSS"] - kss) <= LIMITS[name][1]
