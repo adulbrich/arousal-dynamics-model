@@ -56,13 +56,34 @@ run["KSS"], run["rho_b"], run["S"]  # any state or output, by name
 run.to_dataframe()  # with the pandas extra
 ```
 
-Parameters are a frozen dataclass holding the papers' values, each with its unit and
-source in the field metadata; the one refit value, S_c, says so in its source. Override
-any of them per run:
+### Two parameter sets
+
+Parameters are a frozen dataclass, each field with its unit and source in the metadata.
+Two sets share the same equations and differ in two constants:
+
+| Set | S_c, alerting sigmoid width | theta_H, KSS weight of H | Use it for |
+| --- | --- | --- | --- |
+| `ArousalParameters()`, the default | 0.0306 W/m², fitted | 2.284, fitted | matching the authors' model |
+| `ArousalParameters.papers()` | 1/223.5 W/m², T20 p. 7 | 2.28, P18 Table 3 | the published constants |
+
+The defaults fit both constants to the KSS the original authors shared, and come within
+0.015 KSS point of it while awake; the printed set comes within 0.112
+(`tests/test_validation.py`, `docs/adr/0003-follow-the-authors-model-where-the-print-departs-from-it.md`).
+The printed S_c makes the alerting term a switch between about 25 and 55 lux melanopic
+EDI; the fitted one ramps up until about 150 lux. Run both on the same inputs:
+
+```python
+from arousal_dynamics import ArousalParameters
+
+fitted = simulate(ArousalModel(), inputs, t)  # ArousalParameters(), the default
+printed = simulate(ArousalModel(), inputs, t, params=ArousalParameters.papers())
+gap = fitted["KSS"] - printed["KSS"]  # at most 0.05 here; more in 10 to 150 lux light
+```
+
+Override any constant per run, starting from either set:
 
 ```python
 from dataclasses import replace
-from arousal_dynamics import ArousalParameters
 
 variant = simulate(ArousalModel(), inputs, t, params=replace(ArousalParameters(), s_b=0.3))
 ```
@@ -97,7 +118,8 @@ discrepancy is an issue of its own, with a recommendation. Three fixes follow th
 model where the papers print something else, on the evidence of the papers' own account
 of its behaviour and of the KSS the original authors shared: St Hilaire's photic drive
 ([#6][i6]), an alerting term that sees light only while awake ([#14][i14]), and its sigmoid
-normalized and refit ([#11][i11]). `docs/adr/0003-follow-the-authors-model-where-the-print-departs-from-it.md`
+normalized and fitted ([#11][i11]). The defaults also fit theta_H within its printed
+rounding, and `ArousalParameters.papers()` keeps the printed values for both. `docs/adr/0003-follow-the-authors-model-where-the-print-departs-from-it.md`
 records why, and `tests/test_validation.py` how close the model now comes to that output.
 The two code bugs, the circadian phase ([#8][i8]) and the melatonin suppression form
 ([#9][i9]), are tests marked as expected failures in `tests/test_invariants.py`; each fix
