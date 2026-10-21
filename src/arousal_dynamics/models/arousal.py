@@ -7,9 +7,10 @@ Tekieh et al. 2020 ([T20]). Citations are in the README.
 
 Every equation is a function of state values and an `ArousalParameters`, works
 on scalars and arrays alike, and names its source. Known discrepancies with the
-papers are GitHub issues, indexed in issue #7 and cited below by number; this
-module reproduces the original code exactly, and each fix lands on its own so
-its effect on the golden outputs is visible.
+papers are GitHub issues, indexed in issue #7 and cited below by number. The
+module began as an exact copy of the original code; an equation that departs
+from it says so and cites its issue, and each fix lands on its own so its
+effect on the golden outputs is visible.
 """
 
 from dataclasses import dataclass, field
@@ -32,6 +33,10 @@ def _p(default: float, unit: str, source: str) -> Any:
 @dataclass(frozen=True, kw_only=True)
 class ArousalParameters:
     """Every constant of the model, with the papers' values as defaults.
+
+    Two defaults are fitted rather than printed: S_c and theta_H, fitted to the
+    KSS the original authors shared (`tests/test_validation.py`).
+    `ArousalParameters.papers()` holds the printed values for both.
 
     Override one with `dataclasses.replace(params, s_b=0.3)`. Derived defaults
     (`tau_m`, `tau_x`, `tau_y`, `nu_yy`, `nu_yx`) are fixed numbers, not
@@ -87,8 +92,8 @@ class ArousalParameters:
 
     # Photic drive
     epsilon: float = _p(0.4, "1", "P18 Table 1")
-    i_0: float = _p(100, "lx", "P18 Table 1")
-    i_1: float = _p(9500, "lx", "P18 Table 1")
+    i_0: float = _p(100, "lx", "P18 Table 1; the saturation constant of SH07 Eq 9 (issue #6)")
+    i_1: float = _p(9500, "lx", "P18 Table 1; the power-law constant of SH07 Eq 1 (issue #6)")
     alpha_0: float = _p(0.1 / 60.0, "1/s", "P18 Table 1")
     f_4100k: float = _p(8.19e-4, "W/m^2/lx", "T20 Eq 7")
     photic_version: Literal["2018", "2020"] = field(
@@ -104,10 +109,17 @@ class ArousalParameters:
 
     # Alertness sigmoid
     s_b: float = _p(0.05, "W/m^2", "T20 p. 7")
+    # Fitted, not a paper value. T20 p. 7 prints S_c = 223.5 m^2/W, which the
+    # authors gave in 2021 as 1/223.5 W/m^2 (issue #10). That width reproduces
+    # neither T20's own dose-response (Fig 6) nor the KSS the authors shared
+    # (data/output.csv); 0.0306 W/m^2 is the fit to the shared output, jointly
+    # with theta_H, with S_b, nu_LA and tau_L at T20's values
+    # (tests/test_validation.py). Fig 6 implies a width of the same order
+    # (issue #11).
     s_c: float = _p(
-        1.0 / 223.5,
+        0.0306,
         "W/m^2",
-        "T20 p. 7 prints 223.5 m^2/W; inverted for a dimensionless exponent (issue #10)",
+        "Fitted to the authors' shared output; T20 p. 7 prints 223.5 m^2/W (issues #10, #11)",
     )
 
     # Melatonin suppression
@@ -125,12 +137,28 @@ class ArousalParameters:
 
     # KSS
     theta_0: float = _p(-24.34, "1", "P18 Table 3")
-    theta_h: float = _p(2.28, "1/nM", "P18 Table 3")
+    # Fitted, not the printed value. P18 Table 3 prints 2.28, and 2.284 rounds
+    # to it. Fitted jointly with S_c, it removes a constant 0.05 point offset
+    # against the KSS the authors shared (tests/test_validation.py).
+    theta_h: float = _p(
+        2.284, "1/nM", "Fitted to the authors' shared output; P18 Table 3 prints 2.28"
+    )
     theta_c: float = _p(-1.74, "1", "P18 Table 3")
 
+    @classmethod
+    def papers(cls) -> "ArousalParameters":
+        """Every constant as the papers print it, S_c and theta_H included.
 
-# Equations. Each reproduces the original expression and operation order, so
-# that results are bitwise identical to the code the golden tests pin.
+        The defaults fit those two to the KSS the original authors shared. Here
+        S_c is T20's 223.5 m^2/W, which the authors gave in 2021 as 1/223.5 W/m^2
+        (issue #10), and theta_H is P18 Table 3's 2.28. The equations are the
+        same for both sets, including the fixes for issues #6, #11 and #14.
+        """
+        return cls(s_c=1.0 / 223.5, theta_h=2.28)
+
+
+# Equations. Each keeps the original expression and operation order unless its
+# docstring cites a fix, so the golden tests pin results bitwise.
 
 
 def wake_effort(Q_v: Value, forced: Value, p: ArousalParameters) -> Value:
@@ -151,14 +179,25 @@ def nonphotic_drive(X: Value, S: Value, p: ArousalParameters) -> Value:
 def photoreceptor_conversion_rate(IE: Value, S: Value, p: ArousalParameters) -> Value:
     """Photoreceptor activation rate alpha, gated by wake.
 
-    `p.photic_version` picks the form: "2018" takes photopic illuminance in lux
-    (P18 Table 1 Eq 13), "2020" melanopic irradiance in W/m^2 (T20 Eq 7).
+    alpha = alpha_0 (I / I_1)^(1/2) I / (I + I_0), St Hilaire et al. 2007
+    ([SH07], J Theor Biol 247:583) Eq 9: the power law of their Eq 1, with
+    I_1 = 9500 lux, times a factor that is linear below I_0 = 100 lux and
+    saturates above it. P18 Table 1 Eq 13 and T20 Eq 6 print I_0 and I_1 the
+    other way round (issue #6). P16 (p. 500) builds the light response on
+    SH07, and only SH07's form gives the entrained sleep from about 23:30 to
+    08:00 that P16 (p. 500), P18 (p. 204) and T20 (p. 7) report for their
+    250/40/0 lux protocol; the printed form sleeps from 22:30 to 07:00.
+
+    `p.photic_version` picks the unit: "2018" takes photopic illuminance in
+    lux, "2020" melanopic irradiance in W/m^2 with I_0 and I_1 scaled by
+    F_4100K (T20 Eq 7).
     """
     IE = IE * S
     if p.photic_version == "2018":
-        return ((p.alpha_0 * IE) / (IE + p.i_1)) * sqrt(IE / p.i_0)
+        return p.alpha_0 * sqrt(IE / p.i_1) * IE / (IE + p.i_0)
     if p.photic_version == "2020":
-        return ((p.alpha_0 * IE) / (IE + p.i_1 * p.f_4100k)) * sqrt(IE / (p.i_0 * p.f_4100k))
+        i_0, i_1 = p.i_0 * p.f_4100k, p.i_1 * p.f_4100k
+        return p.alpha_0 * sqrt(IE / i_1) * IE / (IE + i_0)
     msg = f"photic_version must be '2018' or '2020', got {p.photic_version!r}"
     raise ValueError(msg)
 
@@ -179,8 +218,15 @@ def sleep_state(V_m: Value, p: ArousalParameters) -> Value:
 
 
 def alertness_sigmoid(E_mel: Value, p: ArousalParameters) -> Value:
-    """Light-dependent sigmoid in [0, 1] driving Theta_L. T20 Eq 14."""
-    return 1 / (1 + exp((p.s_b - E_mel) / p.s_c))
+    """Light-dependent sigmoid driving Theta_L, normalized to [0, 1]. T20 Eq 14.
+
+    T20 p. 7 calls S "a sigmoid function normalized to the range between 0 and
+    1": the logistic 1 / (1 + exp((S_b - E) / S_c)), less its value in
+    darkness and rescaled, so that S is 0 at E = 0 and tends to 1 in bright
+    light (issue #11). The original code normalized it this way until 4ca72b2.
+    """
+    dark = 1 / (1 + exp(p.s_b / p.s_c))
+    return (1 / (1 + exp((p.s_b - E_mel) / p.s_c)) - dark) / (1 - dark)
 
 
 def kss(C: Value, H: Value, Theta_L: Value, p: ArousalParameters) -> Value:
@@ -248,7 +294,7 @@ class ArousalModel:
     time_unit = "s"
 
     def default_parameters(self) -> ArousalParameters:
-        """Return the papers' values."""
+        """Return the defaults: the papers' values, S_c and theta_H fitted."""
         return ArousalParameters()
 
     def initial_state(self, params: ArousalParameters) -> FloatArray:  # noqa: ARG002
@@ -264,7 +310,10 @@ class ArousalModel:
 
         IE = inputs.light(t)
         S = sleep_state(V_m, p)
-        sigmoid = alertness_sigmoid(IE, p)
+        # Closed eyes: the alerting term sees light only while awake, as the
+        # photic drive does (P18 Table 1 Eq 14, I = I S). The authors' shared
+        # output starts the alerting response at wake, not at lights-on (issue #14).
+        sigmoid = alertness_sigmoid(IE * S, p)
         alpha = photoreceptor_conversion_rate(IE, S, p)
         Q_m = firing_rate(V_m, p)
         Q_v = firing_rate(V_v, p)
@@ -272,7 +321,7 @@ class ArousalModel:
         D_v = total_sleep_drive(H, C, p)
         D_n = nonphotic_drive(X, S, p)
         D_p = photic_drive(X, Y, P, alpha, p)
-        F_w = inputs.schedule.forced_wake(t)
+        F_w = 0 if inputs.schedule is None else inputs.schedule.forced_wake(t)
         W = wake_effort(Q_v, F_w, p)
         r = melatonin_suppression(IE, p)
         phi = circadian_phase(X, Y)

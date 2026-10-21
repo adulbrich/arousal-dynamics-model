@@ -2,11 +2,12 @@
 
 import sys
 from collections.abc import Iterator
+from dataclasses import replace
 
 import matplotlib.pyplot as plt
 import pytest
 
-from arousal_dynamics import Trajectory
+from arousal_dynamics import Inputs, Trajectory
 from arousal_dynamics.plotting import plot_light, plot_trajectory
 
 
@@ -25,6 +26,16 @@ def test_light_plot_marks_every_wake_and_bed_time(office_week: Trajectory) -> No
     legend = ax.get_legend()
     assert legend is not None
     assert [t.get_text() for t in legend.get_texts()] == ["Wake time", "Bed time"]
+
+
+def test_light_plot_without_a_forced_wake_window_marks_only_midnights(
+    office_week: Trajectory,
+) -> None:
+    free = replace(office_week, inputs=Inputs(office_week.inputs.light, schedule=None))
+    (ax,) = plot_light(free).axes
+    days = 6
+    assert len(ax.lines) == 1 + (days - 1)
+    assert ax.get_legend() is None
 
 
 def test_trajectory_plot_has_one_panel_per_name(office_week: Trajectory) -> None:

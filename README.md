@@ -11,6 +11,8 @@ Sleepiness Scale (KSS). Equations and parameters come from:
 
 [Postnova et al. 2018] Postnova, S., Lockley, S. W., & Robinson, P. A. (2018). Prediction of Cognitive Performance and Subjective Sleepiness Using a Model of Arousal Dynamics. _Journal of Biological Rhythms_, _33_(2), 203–218. https://doi.org/10.1177/0748730418758454
 
+[St Hilaire et al. 2007] St Hilaire, M. A., Klerman, E. B., Khalsa, S. B., Wright, K. P., Czeisler, C. A., & Kronauer, R. E. (2007). Addition of a non-photic component to a light-based mathematical model of the human circadian pacemaker. _Journal of Theoretical Biology_, _247_(4), 583–599. https://doi.org/10.1016/j.jtbi.2007.04.001
+
 [Tekieh et al. 2020] Tekieh, T., Lockley, S. W., Robinson, P. A., McCloskey, S., Zobaer, M. S., & Postnova, S. (2020). Modeling melanopsin‐mediated effects of light on circadian phase, melatonin suppression, and subjective sleepiness. _Journal of Pineal Research_, _69_(3), e12681. https://doi.org/10.1111/jpi.12681
 
 Project led by Clotilde Pierson. Implementation by Alexander Ulbrich.
@@ -54,12 +56,34 @@ run["KSS"], run["rho_b"], run["S"]  # any state or output, by name
 run.to_dataframe()  # with the pandas extra
 ```
 
-Parameters are a frozen dataclass holding the papers' values, each with its unit and
-source in the field metadata. Override any of them per run:
+### Two parameter sets
+
+Parameters are a frozen dataclass, each field with its unit and source in the metadata.
+Two sets share the same equations and differ in two constants:
+
+| Set | S_c, alerting sigmoid width | theta_H, KSS weight of H | Use it for |
+| --- | --- | --- | --- |
+| `ArousalParameters()`, the default | 0.0306 W/m², fitted | 2.284, fitted | matching the authors' model |
+| `ArousalParameters.papers()` | 1/223.5 W/m², T20 p. 7 | 2.28, P18 Table 3 | the published constants |
+
+The defaults fit both constants to the KSS the original authors shared, and come within
+0.015 KSS point of it while awake; the printed set comes within 0.112
+(`tests/test_validation.py`, `docs/adr/0003-follow-the-authors-model-where-the-print-departs-from-it.md`).
+The printed S_c makes the alerting term a switch between about 25 and 55 lux melanopic
+EDI; the fitted one ramps up until about 150 lux. Run both on the same inputs:
+
+```python
+from arousal_dynamics import ArousalParameters
+
+fitted = simulate(ArousalModel(), inputs, t)  # ArousalParameters(), the default
+printed = simulate(ArousalModel(), inputs, t, params=ArousalParameters.papers())
+gap = fitted["KSS"] - printed["KSS"]  # at most 0.05 here; more in 10 to 150 lux light
+```
+
+Override any constant per run, starting from either set:
 
 ```python
 from dataclasses import replace
-from arousal_dynamics import ArousalParameters
 
 variant = simulate(ArousalModel(), inputs, t, params=replace(ArousalParameters(), s_b=0.3))
 ```
@@ -72,7 +96,7 @@ variant = simulate(ArousalModel(), inputs, t, params=replace(ArousalParameters()
 | --- | --- |
 | `arousal_dynamics.models.arousal` | `ArousalModel`, `ArousalParameters`, and every equation as a function citing its paper and equation number |
 | `arousal_dynamics.simulation` | `simulate`, `Trajectory`, and the `Model` interface a second model would implement |
-| `arousal_dynamics.inputs` | `LightInput` (light with units and interpolation), `WakeSchedule`, `Inputs` |
+| `arousal_dynamics.inputs` | `LightInput` (light with units and interpolation), `WakeSchedule`, `Inputs` (`schedule=None` forces no wake) |
 | `arousal_dynamics.units` | Melanopic EDI and melanopic irradiance conversion (CIE S 026) |
 | `arousal_dynamics.plotting` | `plot_light`, `plot_trajectory` (the `plot` extra) |
 
@@ -88,16 +112,25 @@ stays that way for now.
 
 ## Known discrepancies with the papers
 
-The code reproduces the original implementation exactly, including where it departs from
-the papers. The equation audit ([issue #7][audit]) checks every equation and constant
-against the four papers; each discrepancy is an issue of its own, with a recommendation.
+The code began as an exact copy of the original implementation. The equation audit
+([issue #7][audit]) checks every equation and constant against the papers; each
+discrepancy is an issue of its own, with a recommendation. Three fixes follow the authors'
+model where the papers print something else, on the evidence of the papers' own account
+of its behaviour and of the KSS the original authors shared: St Hilaire's photic drive
+([#6][i6]), an alerting term that sees light only while awake ([#14][i14]), and its sigmoid
+normalized and fitted ([#11][i11]). The defaults also fit theta_H within its printed
+rounding, and `ArousalParameters.papers()` keeps the printed values for both. `docs/adr/0003-follow-the-authors-model-where-the-print-departs-from-it.md`
+records why, and `tests/test_validation.py` how close the model now comes to that output.
 The two code bugs, the circadian phase ([#8][i8]) and the melatonin suppression form
 ([#9][i9]), are tests marked as expected failures in `tests/test_invariants.py`; each fix
 lands in its own pull request.
 
 [audit]: https://github.com/adulbrich/arousal-dynamics-model/issues/7
+[i6]: https://github.com/adulbrich/arousal-dynamics-model/issues/6
 [i8]: https://github.com/adulbrich/arousal-dynamics-model/issues/8
 [i9]: https://github.com/adulbrich/arousal-dynamics-model/issues/9
+[i11]: https://github.com/adulbrich/arousal-dynamics-model/issues/11
+[i14]: https://github.com/adulbrich/arousal-dynamics-model/issues/14
 
 Two numerical facts worth knowing before comparing against data. From its default initial
 state the model takes about two weeks to entrain to a regular schedule, so start a

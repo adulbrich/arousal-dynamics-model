@@ -7,16 +7,34 @@ test instead of agreeing with itself.
 
 import math
 from collections.abc import Callable
-from dataclasses import replace
+from dataclasses import fields, replace
 from typing import Any
 
 import numpy as np
 import pytest
 
-from arousal_dynamics import ArousalParameters, WakeSchedule
+from arousal_dynamics import ArousalModel, ArousalParameters, Inputs, LightInput, WakeSchedule
 from arousal_dynamics.models import arousal as eq
 
 P = ArousalParameters()
+
+
+class TestParameterSets:
+    """The defaults fit S_c and theta_H; `papers()` prints them; nothing else differs."""
+
+    def test_papers_prints_s_c_and_theta_h(self) -> None:
+        # T20 p. 7: S_c = 223.5 m^2/W, used as 1/223.5 W/m^2 (issue #10); P18 Table 3: 2.28
+        papers = ArousalParameters.papers()
+        assert papers.s_c == 1 / 223.5
+        assert papers.theta_h == 2.28
+
+    def test_defaults_are_the_fit(self) -> None:
+        assert (P.s_c, P.theta_h) == (0.0306, 2.284)
+
+    def test_only_the_fitted_constants_differ(self) -> None:
+        papers = ArousalParameters.papers()
+        differ = {f.name for f in fields(P) if getattr(P, f.name) != getattr(papers, f.name)}
+        assert differ == {"s_c", "theta_h"}
 
 
 class TestFiringRate:
@@ -77,18 +95,26 @@ class TestWakeEffort:
 
 class TestPhotoreceptor:
     def test_2018_photopic(self) -> None:
-        # alpha_0 I / (I + I_1) sqrt(I / I_0), P18 Table 1 Eq 13
+        # alpha_0 (I / 9500)^(1/2) I / (I + 100), SH07 Eq 9 (issue #6)
         p = replace(P, photic_version="2018")
         alpha_0 = 0.1 / 60
         for lux in (1.0, 100.0, 1000.0):
-            expected = alpha_0 * lux / (lux + 9500) * math.sqrt(lux / 100)
+            expected = alpha_0 * math.sqrt(lux / 9500) * lux / (lux + 100)
             assert eq.photoreceptor_conversion_rate(lux, 1, p) == pytest.approx(expected)
 
     def test_2020_melanopic(self) -> None:
         # The 2018 form with I_0 and I_1 scaled by F_4100K, T20 Eq 7
         e, f = 0.1, 8.19e-4
-        expected = (0.1 / 60) * e / (e + 9500 * f) * math.sqrt(e / (100 * f))
+        expected = (0.1 / 60) * math.sqrt(e / (9500 * f)) * e / (e + 100 * f)
         assert eq.photoreceptor_conversion_rate(e, 1, P) == pytest.approx(expected)
+
+    def test_grows_as_i_to_the_1_5_in_dim_light(self) -> None:
+        # SH07, text after Eq 9: alpha grows as I^1.5 well below 100 lux.
+        p = replace(P, photic_version="2018")
+        ratio = eq.photoreceptor_conversion_rate(0.02, 1, p) / eq.photoreceptor_conversion_rate(
+            0.01, 1, p
+        )
+        assert ratio == pytest.approx(2**1.5, rel=1e-3)
 
     @pytest.mark.parametrize("version", ["2018", "2020"])
     def test_asleep_sees_no_light(self, version: str) -> None:
@@ -109,17 +135,27 @@ class TestSleepState:
 
 
 class TestAlertness:
-    def test_sigmoid_is_half_at_s_b(self) -> None:
-        # 1 / (1 + exp((S_b - E) / S_c)), T20 Eq 14
-        assert eq.alertness_sigmoid(0.05, P) == pytest.approx(0.5)
+    # S_b = 0.05 W/m^2 (T20 p. 7); S_c = 0.0306 W/m^2, refit (issue #11)
+    S_B, S_C = 0.05, 0.0306
+
+    @classmethod
+    def _normalized(cls, logistic: float) -> float:
+        # T20 p. 7: the logistic less its value in darkness, rescaled to [0, 1]
+        dark = 1 / (1 + math.exp(cls.S_B / cls.S_C))
+        return (logistic - dark) / (1 - dark)
+
+    def test_sigmoid_at_s_b(self) -> None:
+        # 1 / (1 + exp((S_b - E) / S_c)), T20 Eq 14, is 1/2 at E = S_b before normalizing
+        assert eq.alertness_sigmoid(self.S_B, P) == pytest.approx(self._normalized(0.5))
 
     def test_sigmoid_one_s_c_above(self) -> None:
-        expected = 1 / (1 + math.exp(-1.0))
-        assert eq.alertness_sigmoid(0.05 + 1 / 223.5, P) == pytest.approx(expected)
+        expected = self._normalized(1 / (1 + math.exp(-1.0)))
+        assert eq.alertness_sigmoid(self.S_B + self.S_C, P) == pytest.approx(expected)
 
     def test_kss(self) -> None:
         # Theta_0 + (Theta_H + Theta_L) H + Theta_C C, T20 Eq 12
-        expected = -24.34 + (2.28 - 0.11) * 13.0 + (-1.74) * 0.5
+        # theta_H = 2.284 is fitted; P18 Table 3 prints 2.28.
+        expected = -24.34 + (2.284 - 0.11) * 13.0 + (-1.74) * 0.5
         assert eq.kss(0.5, 13.0, -0.11, P) == pytest.approx(expected)
 
 
@@ -171,6 +207,16 @@ class TestForcedWake:
     def test_unsupported_windows_are_rejected(self, wake: float, bed: float) -> None:
         with pytest.raises(ValueError, match="waketime"):
             WakeSchedule(waketime=wake, bedtime=bed)
+
+    def test_no_schedule_never_forces_wake(self) -> None:
+        # Asleep: VLPO active, MA quiet. A window would push V_m up; no window leaves W = 0.
+        y = np.array([2.0, -11.7, 13.0, -0.6, -1.0, 0.25, 0.0, 0.0, 10.0])
+        model, light, noon = ArousalModel(), LightInput.constant(0.0), 12 * 3600.0
+        free = model.derivatives(noon, y, P, Inputs(light, schedule=None))
+        forced = model.derivatives(noon, y, P, Inputs(light, WakeSchedule(0, 24)))
+        unforced = (P.nu_mv * eq.firing_rate(2.0, P) + 11.7 + P.d_m) / P.tau_m
+        assert free[1] == pytest.approx(unforced)
+        assert forced[1] > free[1]
 
 
 SCALAR_AND_ARRAY_CASES = [

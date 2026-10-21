@@ -1,5 +1,7 @@
 # 0002. Keep the arousal model to the light it was fitted on
 
+Amended in part by ADR 0003: fixes that reproduce the authors' own model are in scope.
+
 The arousal model is poor at high light levels: its light responses were calibrated
 mostly on evening and night-time studies, with few daytime data, and its alerting term
 saturates at office light, so an outdoor day and an office day give nearly the same KSS.

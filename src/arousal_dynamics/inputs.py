@@ -155,7 +155,12 @@ class WakeSchedule:
 
 @dataclass(frozen=True)
 class Inputs:
-    """Everything outside the model that a simulation reads."""
+    """Everything outside the model that a simulation reads.
+
+    `schedule=None` enforces no wake at all: the model falls asleep and wakes
+    on its own, as in the entrainment protocol of Postnova et al. 2016 (p. 500)
+    and 2018 (p. 204).
+    """
 
     light: LightInput
-    schedule: WakeSchedule = field(default_factory=WakeSchedule)
+    schedule: WakeSchedule | None = field(default_factory=WakeSchedule)
